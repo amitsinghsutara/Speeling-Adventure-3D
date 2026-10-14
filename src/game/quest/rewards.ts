@@ -16,6 +16,17 @@ export function starRewardId(questId: string, star: number): string {
   return `star:${questId}#${star}`;
 }
 
+/** Stars collected per quest, derived from the reward ids. */
+export function starsByQuest(collectedRewardIds: readonly string[]): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const id of collectedRewardIds) {
+    const match = /^star:(.+)#\d+$/.exec(id);
+    if (!match || !match[1]) continue;
+    result.set(match[1], (result.get(match[1]) ?? 0) + 1);
+  }
+  return result;
+}
+
 /** Grants a reward once; repeated grants of the same id are no-ops. */
 export function grantReward(
   rewards: GameRewards,

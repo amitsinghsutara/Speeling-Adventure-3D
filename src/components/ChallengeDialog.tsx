@@ -120,7 +120,9 @@ export function ChallengeDialog({
   const completed = quest.phase === "completed";
   const disabled = new Set(quest.lastResult?.correct ? [] : (quest.lastResult?.disabledWords ?? []));
   const hint = !quest.lastResult?.correct ? (quest.lastResult?.hint ?? null) : null;
-  const progressLabel = `Word ${challenge.questionIndex + 1} of ${challenge.questionCount}`;
+  const progressLabel = challenge.isExtra
+    ? `Practice word · ${challenge.newWordsDone} of ${challenge.newWordsTotal} done`
+    : `Word ${challenge.newWordsDone + 1} of ${challenge.newWordsTotal}`;
 
   return (
     <div className="overlay overlay--dialog">

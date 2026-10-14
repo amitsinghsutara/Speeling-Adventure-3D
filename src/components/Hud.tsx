@@ -1,4 +1,5 @@
 import type { ControlMode } from "@/game/input/controlMode";
+import { HoldButton } from "./HoldButton";
 
 export interface HudProps {
   controlMode: ControlMode;
@@ -12,6 +13,8 @@ export interface HudProps {
   /** Offline readiness text, or null when nothing needs saying. */
   offlineLabel?: string | null;
   offlinePhase?: string;
+  /** Opens the grown-ups screen after a press-and-hold. */
+  onOpenGrownUps?: () => void;
 }
 
 const HINTS: Record<ControlMode, string> = {
@@ -27,6 +30,7 @@ export function Hud({
   persistent = true,
   offlineLabel = null,
   offlinePhase = "disabled",
+  onOpenGrownUps,
 }: HudProps) {
   return (
     <div
@@ -37,8 +41,15 @@ export function Hud({
     >
       <div className="hud__top">
         <div className="hud__badge">Spelling Adventure 3D</div>
-        <div className="hud__badge hud__stars" aria-label={`${stars} stars collected`}>
-          <span aria-hidden="true">⭐</span> {stars}
+        <div className="hud__top-right">
+          {onOpenGrownUps ? (
+            <HoldButton label="For grown-ups: press and hold to open" onComplete={onOpenGrownUps}>
+              For grown-ups
+            </HoldButton>
+          ) : null}
+          <div className="hud__badge hud__stars" aria-label={`${stars} stars collected`}>
+            <span aria-hidden="true">⭐</span> {stars}
+          </div>
         </div>
       </div>
       {offlineLabel ? (

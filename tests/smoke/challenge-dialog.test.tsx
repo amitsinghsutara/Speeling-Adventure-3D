@@ -12,10 +12,11 @@ const CHALLENGE: SpellingChallenge = {
   level: 1,
   targetWord: "sat",
   choices: [{ word: "sit" }, { word: "sat" }, { word: "sap" }, { word: "hat" }],
-  questionIndex: 0,
-  questionCount: 5,
+  newWordsDone: 0,
+  newWordsTotal: 5,
   strategy: "CONTINUE_SEQUENCE",
   presentation: "FULL_SET",
+  isExtra: false,
   provisional: true,
 };
 
@@ -32,7 +33,7 @@ const WRONG: AnswerResult = {
   nextAction: "retry",
   hint: "Listen to the middle sound.",
   disabledWords: ["sit"],
-  progress: { answered: 0, total: 5, mistakes: 1 },
+  progress: { newWordsDone: 0, newWordsTotal: 5, questionsAsked: 1, mistakes: 1 },
   nextChallenge: null,
   completion: null,
 };
@@ -64,6 +65,11 @@ describe("ChallengeDialog", () => {
     expect(tiles.map((t) => t.textContent)).toEqual(["sit", "sat", "sap", "hat"]);
     fireEvent.click(tiles[1]!);
     expect(onSubmit).toHaveBeenCalledWith("sat");
+  });
+
+  it("labels policy-chosen practice words as extras", () => {
+    setup({ ...ACTIVE, challenge: { ...CHALLENGE, isExtra: true, strategy: "CONSOLIDATE", newWordsDone: 5 } });
+    expect(screen.getByText(/practice word · 5 of 5 done/i)).toBeInTheDocument();
   });
 
   it("disables a wrong tile and shows its hint", () => {

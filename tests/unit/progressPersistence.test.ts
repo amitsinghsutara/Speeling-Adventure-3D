@@ -46,6 +46,10 @@ function flaky(inner: ProgressRepository) {
       state.attempts += 1;
       return state.failing ? fail() : inner.appendLearningEvents(e);
     },
+    appendDecisions: (d) => {
+      state.attempts += 1;
+      return state.failing ? fail() : inner.appendDecisions(d);
+    },
   };
   return { repo, state };
 }
@@ -93,6 +97,7 @@ describe("createProgressPersistence", () => {
     const restored = await persistence.restore();
     expect(restored.progress?.completedQuestIds).toEqual(["q"]);
     expect(restored.storedEventCount).toBe(2);
+    expect(restored.events).toHaveLength(2);
     expect(restored.recovered).toBe(false);
     expect(persistence.getStatus()).toMatchObject({ phase: "ready", persistent: false });
   });

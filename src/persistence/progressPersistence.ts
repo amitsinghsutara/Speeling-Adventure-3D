@@ -1,3 +1,4 @@
+import type { AdaptiveDecision } from "@/learning/decision";
 import type { LearningEvent } from "@/learning/events";
 import type { ProgressRepository } from "./repository";
 import type { GameProgress } from "./schemas";
@@ -8,7 +9,7 @@ export interface PersistenceStatus {
   readonly phase: "restoring" | "ready";
   readonly persistent: boolean;
   readonly lastSave: SaveState;
-  /** Learning events not yet confirmed written; never dropped while the page lives. */
+  /** Learning events and decisions not yet confirmed written; never dropped while the page lives. */
   readonly pendingEvents: number;
   readonly recoveredFromCorruption: boolean;
   readonly lastError: string | null;
@@ -16,6 +17,8 @@ export interface PersistenceStatus {
 
 export interface RestoredState {
   readonly progress: GameProgress | null;
+  /** Valid stored learning events, oldest first (the learner model's history). */
+  readonly events: readonly LearningEvent[];
   readonly storedEventCount: number;
   readonly recovered: boolean;
 }
@@ -26,6 +29,8 @@ export interface ProgressPersistence {
   saveProgress(progress: GameProgress): Promise<boolean>;
   /** Queues an event for durable storage with automatic retry. */
   recordLearningEvent(event: LearningEvent): void;
+  /** Queues an adaptive decision for durable storage with automatic retry. */
+  recordDecision(decision: AdaptiveDecision): void;
   /** Retries anything pending (call on visibility change / pagehide). */
   flush(): Promise<void>;
   getStatus(): PersistenceStatus;
@@ -67,6 +72,8 @@ export function createProgressPersistence(
 
   let pendingProgress: GameProgress | null = null;
   const pendingEvents: LearningEvent[] = [];
+  const pendingDecisions: AdaptiveDecision[] = [];
+  const pendingCount = () => pendingEvents.length + pendingDecisions.length;
   let chain: Promise<unknown> = Promise.resolve();
   let retryScheduled = false;
   let flushing = false;
@@ -102,17 +109,28 @@ export function createProgressPersistence(
   };
 
   const writeEvents = async (): Promise<boolean> => {
-    if (pendingEvents.length === 0) return true;
-    const batch = pendingEvents.slice();
-    const result = await repository.appendLearningEvents(batch);
-    if (result.ok) {
-      pendingEvents.splice(0, batch.length);
-      setStatus({ pendingEvents: pendingEvents.length, lastError: null });
-      return true;
+    let ok = true;
+    if (pendingEvents.length > 0) {
+      const batch = pendingEvents.slice();
+      const result = await repository.appendLearningEvents(batch);
+      if (result.ok) pendingEvents.splice(0, batch.length);
+      else {
+        ok = false;
+        setStatus({ pendingEvents: pendingCount(), lastError: result.error });
+      }
     }
-    setStatus({ pendingEvents: pendingEvents.length, lastError: result.error });
-    scheduleRetry();
-    return false;
+    if (pendingDecisions.length > 0) {
+      const batch = pendingDecisions.slice();
+      const result = await repository.appendDecisions(batch);
+      if (result.ok) pendingDecisions.splice(0, batch.length);
+      else {
+        ok = false;
+        setStatus({ pendingEvents: pendingCount(), lastError: result.error });
+      }
+    }
+    if (ok) setStatus({ pendingEvents: pendingCount(), lastError: null });
+    else scheduleRetry();
+    return ok;
   };
 
   const flushInternal = (): Promise<void> =>
@@ -141,6 +159,7 @@ export function createProgressPersistence(
       });
       return {
         progress: loaded.status === "ok" ? loaded.progress : null,
+        events: [...events.events].sort((a, b) => a.at - b.at),
         storedEventCount: events.events.length,
         recovered,
       };
@@ -153,7 +172,13 @@ export function createProgressPersistence(
 
     recordLearningEvent(event) {
       pendingEvents.push(event);
-      setStatus({ pendingEvents: pendingEvents.length });
+      setStatus({ pendingEvents: pendingCount() });
+      void enqueue(writeEvents);
+    },
+
+    recordDecision(decision) {
+      pendingDecisions.push(decision);
+      setStatus({ pendingEvents: pendingCount() });
       void enqueue(writeEvents);
     },
 

@@ -1,18 +1,22 @@
+import { parseAdaptiveDecision, type AdaptiveDecision } from "@/learning/decision";
 import { parseLearningEvent, type LearningEvent } from "@/learning/events";
 import {
   PROGRESS_KEY,
   backupKey,
   type LoadEventsResult,
   type LoadProgressResult,
+  type LoadRowsResult,
   type ProgressRepository,
   type WriteResult,
 } from "./repository";
 import { migrateGameProgress, type GameProgress } from "./schemas";
 
 export const DB_NAME = "spelling-adventure-3d";
-export const DB_VERSION = 1;
+/** v2 added the adaptiveDecisions store. */
+export const DB_VERSION = 2;
 export const STORE_PROGRESS = "progress";
 export const STORE_EVENTS = "learningEvents";
+export const STORE_DECISIONS = "adaptiveDecisions";
 
 export interface IndexedDbRepositoryOptions {
   readonly factory: IDBFactory;
@@ -51,6 +55,9 @@ function openDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_EVENTS)) {
         db.createObjectStore(STORE_EVENTS, { autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains(STORE_DECISIONS)) {
+        db.createObjectStore(STORE_DECISIONS, { autoIncrement: true });
       }
     };
     request.onblocked = () => reject(new Error("IndexedDB open blocked by another tab"));
@@ -188,11 +195,43 @@ export function createIndexedDbRepository(
       }
     },
 
+    async appendDecisions(rows: readonly AdaptiveDecision[]): Promise<WriteResult> {
+      if (rows.length === 0) return { ok: true };
+      try {
+        await transaction(STORE_DECISIONS, "readwrite", async (tx) => {
+          const store = tx.objectStore(STORE_DECISIONS);
+          for (const row of rows) await requestToPromise(store.add(row));
+        });
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: describeError(error) };
+      }
+    },
+
+    async loadDecisions(): Promise<LoadRowsResult<AdaptiveDecision>> {
+      try {
+        const raw = await transaction(STORE_DECISIONS, "readonly", async (tx) =>
+          requestToPromise(tx.objectStore(STORE_DECISIONS).getAll()),
+        );
+        const rows: AdaptiveDecision[] = [];
+        let invalidCount = 0;
+        for (const entry of raw as unknown[]) {
+          const parsed = parseAdaptiveDecision(entry);
+          if (parsed) rows.push(parsed);
+          else invalidCount += 1;
+        }
+        return { rows, invalidCount };
+      } catch (error) {
+        return { rows: [], invalidCount: 0, error: describeError(error) };
+      }
+    },
+
     async clearAll(): Promise<WriteResult> {
       try {
-        await transaction([STORE_PROGRESS, STORE_EVENTS], "readwrite", async (tx) => {
+        await transaction([STORE_PROGRESS, STORE_EVENTS, STORE_DECISIONS], "readwrite", async (tx) => {
           await requestToPromise(tx.objectStore(STORE_PROGRESS).clear());
           await requestToPromise(tx.objectStore(STORE_EVENTS).clear());
+          await requestToPromise(tx.objectStore(STORE_DECISIONS).clear());
         });
         return { ok: true };
       } catch (error) {

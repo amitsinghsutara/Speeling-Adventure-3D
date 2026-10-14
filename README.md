@@ -125,5 +125,17 @@ three approved foils from a foil codebook, plus a bundled MP3 per word.
 - A sign starts one puzzle (five words in curriculum order). The child hears
   the word and picks it among four tiles; wrong tiles are disabled with a
   hint, and the puzzle awards 1 to 3 stars by mistakes. Puzzles unlock in order.
-- The source's adaptive strategies and learner model are not ported yet;
-  mastery is never claimed.
+- An on-device adaptive policy (ported from the source project) chooses each
+  question: the puzzle's words in order, plus up to three free practice extras
+  (focused error-pattern practice, spaced review, transfer checks,
+  consolidation, mixed practice). Harder foil tiers are held back until the
+  child is ready and choices are reduced when recent answers were hard. Every
+  decision records its reasons. Thresholds are provisional; mastery is never
+  claimed.
+
+## For grown-ups
+
+Press and hold **For grown-ups** in the top-right corner for about two
+seconds to open the progress screen: questions answered, level statuses,
+tricky spots, words to practise together, device facts, and a confirmed
+reset. Everything is computed on the device; nothing is sent anywhere.

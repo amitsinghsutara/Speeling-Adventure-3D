@@ -531,3 +531,196 @@ summary:focus-visible {
 .challenge__stars--dim {
   color: #cfc8b6;
 }
+
+/* ---------- Hold-to-open gate ---------- */
+
+.hold-button {
+  position: relative;
+  pointer-events: auto;
+  min-height: 48px;
+  padding: 0.4rem 1rem 0.4rem 2.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 246, 229, 0.92);
+  color: #5a5866;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hold-button__ring {
+  position: absolute;
+  left: 0.6rem;
+  top: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: -0.75rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--fox) 0deg, var(--fox) var(--progress, 0deg), #e2dccb var(--progress, 0deg));
+}
+
+.hold-button--holding .hold-button__ring {
+  animation: hold-fill var(--hold-ms, 1800ms) linear forwards;
+}
+
+@property --progress {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes hold-fill {
+  from {
+    --progress: 0deg;
+  }
+  to {
+    --progress: 360deg;
+  }
+}
+
+.hold-button:focus-visible {
+  outline: 4px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* ---------- Grown-ups screen ---------- */
+
+.overlay--grownups {
+  background: rgba(43, 42, 51, 0.55);
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.grownups {
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  padding: calc(1rem + env(safe-area-inset-top)) 1rem calc(2rem + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: var(--ink);
+}
+
+.grownups__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.grownups__top h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.grownups__card {
+  background: var(--cream);
+  border-radius: 1.25rem;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.grownups__card h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.grownups__stats,
+.grownups__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.grownups__stats div,
+.grownups__facts div {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.grownups__stats dt,
+.grownups__facts dt {
+  font-size: 0.9rem;
+  color: #5a5866;
+}
+
+.grownups__stats dd {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.grownups__facts dd {
+  margin: 0;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.grownups__list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.grownups__level {
+  list-style: none;
+  margin-left: -1.2em;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.grownups__level-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+
+.grownups__status {
+  font-weight: 700;
+}
+
+.grownups__muted {
+  color: #5a5866;
+}
+
+.grownups__words {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.grownups__stars {
+  font-weight: 800;
+}
+
+.button--danger {
+  background: #c94c4c;
+  box-shadow: 0 4px 0 #8f2f2f;
+}
+
+.hud__top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

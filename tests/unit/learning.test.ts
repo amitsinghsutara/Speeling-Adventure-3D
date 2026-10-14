@@ -152,17 +152,18 @@ describe("learning events", () => {
 });
 
 describe("createCurriculumLearningService", () => {
-  const make = () => {
+  const make = (history: readonly import("@/learning/events").LearningEvent[] = []) => {
     let t = 0;
     let n = 0;
     return createCurriculumLearningService(curriculum, {
       now: () => (t += 100),
       random: () => 0.3,
       newId: () => `id-${++n}`,
+      history,
     });
   };
 
-  it("serves a puzzle's words in curriculum order and completes with stars", () => {
+  it("serves a puzzle's words in curriculum order, consolidates a missed word, and completes with stars", () => {
     const service = make();
     const first = service.selectChallenge({ questId: "level-1/puzzle-1", completedQuestIds: [] });
     expect(first.ok).toBe(true);
@@ -170,34 +171,45 @@ describe("createCurriculumLearningService", () => {
     expect(first.challenge).toMatchObject({
       itemId: "item-001",
       targetWord: "sat",
-      questionIndex: 0,
-      questionCount: 5,
+      newWordsDone: 0,
+      newWordsTotal: 5,
       strategy: "CONTINUE_SEQUENCE",
       presentation: "FULL_SET",
+      isExtra: false,
       provisional: true,
     });
     expect(first.challenge.choices.map((c) => c.word).sort()).toEqual(["hat", "sap", "sat", "sit"]);
 
-    // One mistake on the first word, then straight through.
     const wrong = service.submitAnswer(first.challenge.id, "sit");
     expect(wrong).toMatchObject({ correct: false, nextAction: "retry", disabledWords: ["sit"] });
     expect(wrong.hint).toMatch(/middle sound/);
-    expect(wrong.progress).toEqual({ answered: 0, total: 5, mistakes: 1 });
+    expect(wrong.progress).toMatchObject({ newWordsDone: 0, newWordsTotal: 5, mistakes: 1 });
 
     let challenge = first.challenge;
     let result = service.submitAnswer(challenge.id, "sat");
-    expect(result).toMatchObject({ correct: true, nextAction: "next", progress: { answered: 1, total: 5, mistakes: 1 } });
-    for (let i = 1; i < 5; i += 1) {
+    expect(result).toMatchObject({ correct: true, nextAction: "next" });
+    expect(result.progress).toMatchObject({ newWordsDone: 1, mistakes: 1 });
+    const strategies = [challenge.strategy];
+    let guard = 0;
+    while (result.nextAction === "next" && guard++ < 20) {
       challenge = result.nextChallenge!;
-      expect(challenge.questionIndex).toBe(i);
+      strategies.push(challenge.strategy);
       result = service.submitAnswer(challenge.id, challenge.targetWord);
     }
+    // Five new words, then the missed word is consolidated as a free extra.
+    expect(strategies).toEqual([
+      "CONTINUE_SEQUENCE",
+      "CONTINUE_SEQUENCE",
+      "CONTINUE_SEQUENCE",
+      "CONTINUE_SEQUENCE",
+      "CONTINUE_SEQUENCE",
+      "CONSOLIDATE",
+    ]);
     expect(result.nextAction).toBe("complete");
     expect(result.completion).toEqual({ stars: 2, mistakes: 1 });
-    expect(result.nextChallenge).toBeNull();
 
     const events = service.getEvents();
-    expect(events).toHaveLength(6);
+    expect(events).toHaveLength(7);
     expect(events[0]).toMatchObject({
       itemId: "item-001",
       puzzleId: "level-1/puzzle-1",
@@ -205,26 +217,83 @@ describe("createCurriculumLearningService", () => {
       correct: false,
       chosenFoilCode: "V",
       attemptNumber: 1,
-      presentedFoilCodes: expect.arrayContaining(["V", "FC", "IC"]),
+      presentedFoilCodes: ["V", "FC", "IC"],
       contentVersion: curriculum.contentVersion,
-      decisionId: null,
+      decisionId: first.challenge.id,
     });
-    expect(events[1]).toMatchObject({ chosenWord: "sat", correct: true, chosenFoilCode: null, attemptNumber: 2 });
+    const decisions = service.getDecisions();
+    expect(decisions).toHaveLength(6);
+    expect(decisions[5]).toMatchObject({ strategy: "CONSOLIDATE", itemId: "item-001", countsForStars: false, provisional: true });
+  });
+
+  it("does not charge mistakes on extra questions", () => {
+    const service = make();
+    let sel = service.selectChallenge({ questId: "level-1/puzzle-1", completedQuestIds: [] });
+    if (!sel.ok) throw new Error("expected ok");
+    let challenge = sel.challenge;
+    service.submitAnswer(challenge.id, "sit"); // one real mistake
+    let result = service.submitAnswer(challenge.id, "sat");
+    let guard = 0;
+    while (result.nextAction === "next" && guard++ < 20) {
+      challenge = result.nextChallenge!;
+      if (challenge.isExtra) {
+        const foil = challenge.choices.find((c) => c.word !== challenge.targetWord)!;
+        expect(service.submitAnswer(challenge.id, foil.word).progress.mistakes).toBe(1);
+      }
+      result = service.submitAnswer(challenge.id, challenge.targetWord);
+    }
+    expect(result.completion).toEqual({ stars: 2, mistakes: 1 });
+    sel = service.selectChallenge({ questId: "level-1/puzzle-1", completedQuestIds: ["level-1/puzzle-1"] });
+    expect(sel.ok).toBe(true);
+  });
+
+  it("uses restored history for the learner model and never re-records it", () => {
+    const history = ["item-002", "item-003", "item-004"].map((id, i) => {
+      const item = curriculum.items.find((x) => x.id === id)!;
+      return {
+        schemaVersion: 1 as const,
+        id: `h-${i}`,
+        learnerId: "local-learner",
+        sessionId: "old",
+        questionId: `hq-${i}`,
+        at: 10 + i,
+        contentVersion: curriculum.contentVersion,
+        itemId: id,
+        skillId: item.skillId,
+        level: 1,
+        puzzleId: "level-1/puzzle-1",
+        presentedFoilCodes: item.foils.map((f) => f.code),
+        chosenWord: item.foils.find((f) => f.code === "V")?.word ?? "x",
+        correct: false,
+        chosenFoilCode: "V",
+        attemptNumber: 1,
+        elapsedMs: 5,
+        decisionId: null,
+      };
+    });
+    const seen: string[] = [];
+    let n = 0;
+    const service = createCurriculumLearningService(curriculum, {
+      now: () => 1000,
+      random: () => 0.3,
+      newId: () => `n-${++n}`,
+      history,
+      sink: (e) => seen.push(e.id),
+    });
+    expect(service.getEvents()).toHaveLength(3);
+    expect(seen).toEqual([]);
+    const sel = service.selectChallenge({ questId: "level-1/puzzle-1", completedQuestIds: [] });
+    if (!sel.ok) throw new Error("expected ok");
+    // A repeated vowel pattern across three words triggers focused practice first.
+    expect(sel.challenge).toMatchObject({ strategy: "FOCUS_ERROR_PATTERN", isExtra: true });
+    expect(service.getProgressReport().trickySpots.map((s) => s.code)).toEqual(["V"]);
   });
 
   it("refuses locked and unknown puzzles", () => {
     const service = make();
-    expect(service.selectChallenge({ questId: "level-1/puzzle-2", completedQuestIds: [] })).toMatchObject({
-      ok: false,
-      code: "locked",
-    });
-    expect(
-      service.selectChallenge({ questId: "level-1/puzzle-2", completedQuestIds: ["level-1/puzzle-1"] }).ok,
-    ).toBe(true);
-    expect(service.selectChallenge({ questId: "level-2/puzzle-1", completedQuestIds: ["level-1/puzzle-1"] })).toMatchObject({
-      ok: false,
-      code: "locked",
-    });
+    expect(service.selectChallenge({ questId: "level-1/puzzle-2", completedQuestIds: [] })).toMatchObject({ ok: false, code: "locked" });
+    expect(service.selectChallenge({ questId: "level-1/puzzle-2", completedQuestIds: ["level-1/puzzle-1"] }).ok).toBe(true);
+    expect(service.selectChallenge({ questId: "level-2/puzzle-1", completedQuestIds: ["level-1/puzzle-1"] })).toMatchObject({ ok: false, code: "locked" });
     expect(service.selectChallenge({ questId: "nope", completedQuestIds: [] })).toMatchObject({ ok: false, code: "unknown-quest" });
   });
 
@@ -239,7 +308,7 @@ describe("createCurriculumLearningService", () => {
     expect(service.getEvents()).toHaveLength(1);
   });
 
-  it("discards the round on cancel and reports quest info", () => {
+  it("discards the round on cancel, never claims mastery, and reports quest info", () => {
     const service = make();
     const sel = service.selectChallenge({ questId: "level-1/puzzle-1", completedQuestIds: [] });
     if (!sel.ok) throw new Error("expected ok");
@@ -254,5 +323,6 @@ describe("createCurriculumLearningService", () => {
     });
     expect(service.getMasteryStatus().available).toBe(false);
     expect(service.getContentInfo()).toMatchObject({ items: 200, levels: 10, provisional: true });
+    expect(service.getProgressReport().provisional).toBe(true);
   });
 });

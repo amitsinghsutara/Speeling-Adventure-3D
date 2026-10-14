@@ -89,7 +89,7 @@ describe("questReducer", () => {
         nextAction: "complete",
         hint: null,
         disabledWords: [],
-        progress: { answered: 5, total: 5, mistakes: 0 },
+        progress: { newWordsDone: 5, newWordsTotal: 5, questionsAsked: 5, mistakes: 0 },
         nextChallenge: null,
         completion: { stars: 3, mistakes: 0 },
       },
@@ -122,7 +122,7 @@ describe("createQuestController", () => {
     quest.advance();
     state = quest.getState();
     expect(state.celebrating).toBe(false);
-    expect(state.challenge?.questionIndex).toBe(1);
+    expect(state.challenge?.newWordsDone).toBe(1);
     expect(state.lastResult).toBeNull();
 
     finishQuest(quest);

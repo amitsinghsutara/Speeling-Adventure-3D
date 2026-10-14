@@ -35,10 +35,10 @@ only. See `docs/content.md` in the source project.
   another and a level unlocks once the previous level's puzzles are complete.
 - Stars per puzzle: 0 mistakes → 3, 1–3 → 2, 4+ → 1; a replay never lowers a
   stored result. Extras chosen by adaptive strategies never cost stars.
-- The source's adaptive policy and learner-model thresholds are **provisional**
-  (not confirmed by a curriculum owner) and are not yet ported; this project
-  currently uses the documented default strategy `CONTINUE_SEQUENCE` with
-  presentation `FULL_SET` only.
+- The source's learner model, presentation rules, adaptive policy, decision
+  record, configs and grown-ups report were ported on 2026-10-14 (without the
+  optional AI-adviser branches). Their thresholds are **provisional** (not
+  confirmed by a curriculum owner) and are flagged on every decision.
 - The data calls itself an unpiloted, research-informed draft assuming General
   American pronunciation.
 

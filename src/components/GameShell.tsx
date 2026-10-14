@@ -15,6 +15,7 @@ import {
   type ControlMode,
 } from "@/game/input/controlMode";
 import { createInputHub } from "@/game/input/inputHub";
+import { starsByQuest } from "@/game/quest/rewards";
 import { INITIAL_QUEST_STATE, type QuestState } from "@/game/quest/questController";
 import { loadCurriculum } from "@/learning/loadCurriculum";
 import { createCurriculumLearningService } from "@/learning/service";
@@ -32,6 +33,7 @@ import type { RestoredState } from "@/persistence/progressPersistence";
 import { offlineLabel } from "@/offline/serviceWorkerClient";
 import { ChallengeDialog } from "./ChallengeDialog";
 import { GameErrorBoundary } from "./GameErrorBoundary";
+import { GrownUpsScreen, type LevelStars } from "./GrownUpsScreen";
 import { Hud } from "./Hud";
 import { LoadingScreen } from "./LoadingScreen";
 import { RenderErrorScreen } from "./RenderErrorScreen";
@@ -71,6 +73,7 @@ function wantsProgressReset(): boolean {
 export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   const [status, setStatus] = useState<ShellStatus>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [grownUpsOpen, setGrownUpsOpen] = useState(false);
   const input = useMemo(() => createInputHub(), []);
   // Only consumed by client-only children rendered after the scene is ready.
   const controlMode = useMemo<ControlMode>(
@@ -121,13 +124,17 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   }, [persistence]);
 
   // ---- Learning + quest --------------------------------------------------
-  // Imported curriculum (src/learning/content/PROVENANCE.md); events go to persistence.
+  // Imported curriculum (src/learning/content/PROVENANCE.md). The service is
+  // built once stored events are known so the learner model has its history;
+  // new events and decisions stream to persistence.
   const learning = useMemo(
     () =>
       createCurriculumLearningService(loadCurriculum(), {
+        history: restored?.events ?? [],
         sink: (event) => persistence.recordLearningEvent(event),
+        decisionSink: (decision) => persistence.recordDecision(decision),
       }),
-    [persistence],
+    [persistence, restored],
   );
   const initialQuestState = useMemo<QuestState>(
     () => (restored ? questStateFromProgress(restored.progress) : INITIAL_QUEST_STATE),
@@ -138,6 +145,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     quest.state.phase === "active" ||
     quest.state.phase === "completed" ||
     quest.state.phase === "error";
+  const overlayOpen = dialogOpen || grownUpsOpen;
 
   // Persist meaningful changes only (completed quests and rewards).
   const lastSeenQuestState = useRef<QuestState | null>(null);
@@ -149,10 +157,41 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     }
   }, [quest.state, persistence]);
 
-  // Freeze movement and let keys reach the dialog while a challenge is open.
+  // Freeze movement and let keys reach the dialog while an overlay is open.
   useEffect(() => {
-    input.setSuspended(dialogOpen);
-  }, [input, dialogOpen]);
+    input.setSuspended(overlayOpen);
+  }, [input, overlayOpen]);
+
+  // ---- Grown-ups screen -------------------------------------------------
+  const openGrownUps = useCallback(() => setGrownUpsOpen(true), []);
+  const closeGrownUps = useCallback(() => setGrownUpsOpen(false), []);
+  const report = useMemo(
+    () => (grownUpsOpen ? learning.getProgressReport() : null),
+    [grownUpsOpen, learning],
+  );
+  const levelStars = useMemo<LevelStars[]>(() => {
+    const perQuest = starsByQuest(quest.state.rewards.collectedRewardIds);
+    const byLevel = new Map<number, LevelStars>();
+    for (const p of learning.listPuzzles()) {
+      const entry = byLevel.get(p.level) ?? { level: p.level, earned: 0, max: 0 };
+      byLevel.set(p.level, {
+        level: p.level,
+        earned: entry.earned + (perQuest.get(p.questId) ?? 0),
+        max: entry.max + 3,
+      });
+    }
+    return [...byLevel.values()];
+  }, [learning, quest.state.rewards.collectedRewardIds]);
+  const resetProgress = useCallback(() => {
+    const run = async () => {
+      quest.controller.cancel();
+      await repository.clearAll();
+      const result = await persistence.restore();
+      setRestored(result);
+      setGrownUpsOpen(false);
+    };
+    void run();
+  }, [quest.controller, repository, persistence]);
 
   const handleReady = useCallback(() => {
     setStatus({ kind: "ready" });
@@ -226,8 +265,26 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
             persistent={persistenceStatus.persistent}
             offlineLabel={offlineLabel(offline)}
             offlinePhase={offline.phase}
+            onOpenGrownUps={openGrownUps}
           />
-          {controlMode === "touch" && !dialogOpen ? <TouchControls input={input} /> : null}
+          {grownUpsOpen && report ? (
+            <GrownUpsScreen
+              report={report}
+              stars={levelStars}
+              facts={{
+                buildId: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
+                contentVersion: learning.getContentInfo().contentVersion,
+                contentSource: learning.getContentInfo().source,
+                provisionalRules: learning.getContentInfo().provisional,
+                persistent: persistenceStatus.persistent,
+                offlinePhase: offline.phase,
+                storedEvents: learning.getEvents().length,
+              }}
+              onBack={closeGrownUps}
+              onReset={resetProgress}
+            />
+          ) : null}
+          {controlMode === "touch" && !overlayOpen ? <TouchControls input={input} /> : null}
           {dialogOpen ? (
             <ChallengeDialog
               quest={quest.state}

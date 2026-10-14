@@ -1,3 +1,4 @@
+import type { AdaptiveDecision } from "@/learning/decision";
 import type { LearningEvent } from "@/learning/events";
 import type { GameProgress } from "./schemas";
 
@@ -20,9 +21,15 @@ export type WriteResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly error: string };
 
+export interface LoadRowsResult<T> {
+  readonly rows: readonly T[];
+  /** Rows that failed validation and were skipped (never deleted). */
+  readonly invalidCount: number;
+  readonly error?: string;
+}
+
 export interface LoadEventsResult {
   readonly events: readonly LearningEvent[];
-  /** Rows that failed validation and were skipped (never deleted). */
   readonly invalidCount: number;
   readonly error?: string;
 }
@@ -34,7 +41,10 @@ export interface ProgressRepository {
   saveProgress(progress: GameProgress): Promise<WriteResult>;
   appendLearningEvents(events: readonly LearningEvent[]): Promise<WriteResult>;
   loadLearningEvents(): Promise<LoadEventsResult>;
-  /** Removes progress, backups and events. Used by the development reset. */
+  /** Adaptive decisions, so every question can be explained and replayed. */
+  appendDecisions(decisions: readonly AdaptiveDecision[]): Promise<WriteResult>;
+  loadDecisions(): Promise<LoadRowsResult<AdaptiveDecision>>;
+  /** Removes progress, backups, events and decisions. Used by the development reset. */
   clearAll(): Promise<WriteResult>;
 }
 

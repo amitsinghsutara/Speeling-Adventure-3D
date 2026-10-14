@@ -1,9 +1,11 @@
+import { parseAdaptiveDecision, type AdaptiveDecision } from "@/learning/decision";
 import { parseLearningEvent, type LearningEvent } from "@/learning/events";
 import {
   PROGRESS_KEY,
   backupKey,
   type LoadEventsResult,
   type LoadProgressResult,
+  type LoadRowsResult,
   type ProgressRepository,
   type WriteResult,
 } from "./repository";
@@ -14,6 +16,7 @@ export interface MemoryRepositoryOptions {
   /** Pre-seeded raw progress rows, including deliberately corrupt ones for tests. */
   readonly seedProgress?: Readonly<Record<string, unknown>>;
   readonly seedEvents?: readonly unknown[];
+  readonly seedDecisions?: readonly unknown[];
 }
 
 /**
@@ -23,10 +26,13 @@ export interface MemoryRepositoryOptions {
  */
 export function createMemoryRepository(
   options: MemoryRepositoryOptions = {},
-): ProgressRepository & { readonly dump: () => { progress: Record<string, unknown>; events: unknown[] } } {
+): ProgressRepository & {
+  readonly dump: () => { progress: Record<string, unknown>; events: unknown[]; decisions: unknown[] };
+} {
   const now = options.now ?? Date.now;
   const progress = new Map<string, unknown>(Object.entries(options.seedProgress ?? {}));
   const events: unknown[] = [...(options.seedEvents ?? [])];
+  const decisions: unknown[] = [...(options.seedDecisions ?? [])];
   const clone = <T>(value: T): T => structuredClone(value);
 
   return {
@@ -59,11 +65,26 @@ export function createMemoryRepository(
       }
       return { events: valid, invalidCount };
     },
+    async appendDecisions(batch: readonly AdaptiveDecision[]): Promise<WriteResult> {
+      for (const decision of batch) decisions.push(clone(decision));
+      return { ok: true };
+    },
+    async loadDecisions(): Promise<LoadRowsResult<AdaptiveDecision>> {
+      const rows: AdaptiveDecision[] = [];
+      let invalidCount = 0;
+      for (const raw of decisions) {
+        const parsed = parseAdaptiveDecision(raw);
+        if (parsed) rows.push(parsed);
+        else invalidCount += 1;
+      }
+      return { rows, invalidCount };
+    },
     async clearAll(): Promise<WriteResult> {
       progress.clear();
       events.length = 0;
+      decisions.length = 0;
       return { ok: true };
     },
-    dump: () => ({ progress: Object.fromEntries(progress), events: [...events] }),
+    dump: () => ({ progress: Object.fromEntries(progress), events: [...events], decisions: [...decisions] }),
   };
 }

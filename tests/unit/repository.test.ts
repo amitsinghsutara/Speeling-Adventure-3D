@@ -1,5 +1,6 @@
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
+import type { AdaptiveDecision } from "@/learning/decision";
 import type { LearningEvent } from "@/learning/events";
 import { createIndexedDbRepository } from "@/persistence/indexedDbRepository";
 import { createMemoryRepository } from "@/persistence/memoryRepository";
@@ -34,6 +35,26 @@ const EVENT: LearningEvent = {
   decisionId: null,
 };
 
+const DECISION: AdaptiveDecision = {
+  schemaVersion: 1,
+  id: "d-1",
+  at: 1,
+  policyVersion: "adaptive-policy/1-provisional",
+  learnerModelVersion: "learner-model/1-provisional",
+  reasonCodesVersion: 2,
+  provisional: true,
+  puzzleId: "level-1/puzzle-1",
+  itemId: "item-001",
+  skillId: "level-1",
+  foilWords: ["sit", "sap", "hat"],
+  foilCodes: ["V", "FC", "IC"],
+  strategy: "CONTINUE_SEQUENCE",
+  presentation: "FULL_SET",
+  countsForStars: true,
+  evidence: { skillQuestions: 0, skillRecentAccuracy: null },
+  considered: [{ strategy: "FOCUS_ERROR_PATTERN", skipped: "NO_ERROR_PATTERN" }],
+};
+
 interface Harness {
   name: string;
   /** Fresh repository; `seed` writes raw rows underneath the abstraction. */
@@ -58,10 +79,11 @@ const memoryHarness: Harness = {
 
 function rawPut(factory: IDBFactory, store: string, value: unknown, key?: string) {
   return new Promise<void>((resolve, reject) => {
-    const open = factory.open("test-db", 1);
+    const open = factory.open("test-db", 2);
     open.onupgradeneeded = () => {
       open.result.createObjectStore("progress");
       open.result.createObjectStore("learningEvents", { autoIncrement: true });
+      open.result.createObjectStore("adaptiveDecisions", { autoIncrement: true });
     };
     open.onsuccess = () => {
       const db = open.result;
@@ -80,7 +102,7 @@ function rawPut(factory: IDBFactory, store: string, value: unknown, key?: string
 
 function rawKeys(factory: IDBFactory, store: string) {
   return new Promise<string[]>((resolve, reject) => {
-    const open = factory.open("test-db", 1);
+    const open = factory.open("test-db", 2);
     open.onsuccess = () => {
       const db = open.result;
       const req = db.transaction(store, "readonly").objectStore(store).getAllKeys();
@@ -154,13 +176,24 @@ describe.each([memoryHarness, indexedDbHarness])("$name repository", (harness) =
     expect(await repo.appendLearningEvents([])).toEqual({ ok: true });
   });
 
+  it("appends and reloads adaptive decisions, skipping invalid rows", async () => {
+    const repo = await harness.create();
+    expect(await repo.appendDecisions([DECISION])).toEqual({ ok: true });
+    expect(await repo.appendDecisions([])).toEqual({ ok: true });
+    const loaded = await repo.loadDecisions();
+    expect(loaded.rows).toEqual([DECISION]);
+    expect(loaded.invalidCount).toBe(0);
+  });
+
   it("clears everything", async () => {
     const repo = await harness.create();
     await repo.saveProgress(createEmptyProgress());
     await repo.appendLearningEvents([EVENT]);
+    await repo.appendDecisions([DECISION]);
     expect(await repo.clearAll()).toEqual({ ok: true });
     expect(await repo.loadProgress()).toEqual({ status: "empty" });
     expect((await repo.loadLearningEvents()).events).toEqual([]);
+    expect((await repo.loadDecisions()).rows).toEqual([]);
   });
 });
 
@@ -177,6 +210,8 @@ describe("indexeddb repository failure handling", () => {
     if (loaded.status === "recovered") expect(loaded.reason).toMatch(/blocked by policy/);
     expect(await repo.saveProgress(PROGRESS)).toMatchObject({ ok: false });
     expect(await repo.appendLearningEvents([EVENT])).toMatchObject({ ok: false });
+    expect(await repo.appendDecisions([DECISION])).toMatchObject({ ok: false });
+    expect((await repo.loadDecisions()).error).toMatch(/blocked by policy/);
     expect((await repo.loadLearningEvents()).error).toMatch(/blocked by policy/);
     expect(await repo.clearAll()).toMatchObject({ ok: false });
   });

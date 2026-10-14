@@ -139,3 +139,13 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 - World: sign 1 → `level-1/puzzle-1`; sign 2 (branch path) → `level-1/puzzle-2`, locked until puzzle 1 is complete, with a child-friendly locked message.
 - Spec §10 open questions now answered by the source: dataset location/schema and import permission (yes, this import), foil definitions (FoilCodebook sheet, tiers 1–4), audio (bundled MP3 per target, licence unverified). Still open: hosting target, baseline device, mastery/retry thresholds (provisional in source), localisation.
 - Previously stored learning events used the earlier provisional shape; they are now skipped as invalid rows (counted, never deleted). Only development data existed.
+
+### 2026-10-14 — Adaptive learning engine ported
+- Ported from the source project as pure modules with their scenario tests (`tests/unit/learnerModel.test.ts`, `tests/unit/policy.test.ts`): learner model (question grouping, per-skill/foil-type/item stats, error patterns with repeated-evidence rules), presentation rules (hold harder tiers, introduce new challenge, scaffold to two easiest foils), the six-strategy policy with the shared extras budget and per-strategy limits, decision records (schema v1, reason codes v2), both config files with their safety refinements, and the grown-ups report that never says "mastered".
+- Left out on purpose: the source's optional Gemini adviser branches (spec FR-12, no AI in this milestone). Reason codes for the adviser stay reserved so stored decisions remain compatible.
+- Learning service now asks the policy for every question; extras never cost stars; each event links to its decision; decisions persist in a new IndexedDB store (`adaptiveDecisions`, DB version 2, upgrade in place). The learner model is rebuilt from the stored event history at restore, so adaptivity carries across sessions.
+- Thresholds remain PROVISIONAL and every decision/report says so. Mastery is still never declared.
+
+### 2026-10-14 — Grown-ups screen
+- `HoldButton` child gate (press-and-hold 1.8 s; tap, early release, slide-off and keyboard cancel are tested) in the HUD opens `GrownUpsScreen`: overview, per-level status with stars earned/max, tricky spots named from the codebook, words to practise, an "about these numbers" note (on-device only, provisional rules, never "mastered"), device facts (durable storage, stored answers, offline readiness, content version, build id) and a confirmed **Reset progress** that clears IndexedDB and rebuilds the service, quest state and persistence without reloading.
+- Movement and keys are suspended while the screen is open; touch controls hide. No AI suggestions (spec FR-12).
