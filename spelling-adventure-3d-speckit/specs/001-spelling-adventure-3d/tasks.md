@@ -3,28 +3,28 @@
 Tasks are phased. Do not start all phases at once. Mark complete only after verification.
 
 ## Phase 0 — Safety and specification
-- [ ] Confirm working directory is the new project, not an existing game.
-- [ ] Check Node.js/npm and package manager versions.
-- [ ] Check installed Spec Kit version and supported commands.
+- [x] Confirm working directory is the new project, not an existing game.
+- [x] Check Node.js/npm and package manager versions.
+- [x] Check installed Spec Kit version and supported commands.
 - [ ] Resolve hosting target, baseline Android device/WebView, and asset approach.
-- [ ] Review open questions in `spec.md`.
+- [x] Review open questions in `spec.md`.
 - [ ] Record architecture decisions before optional server features.
 
 ## Phase 1 — Foundation
-- [ ] Initialize clean Next.js App Router project with strict TypeScript.
-- [ ] Add React Three Fiber, Three.js and Drei.
-- [ ] Add Vitest and test scripts.
-- [ ] Add lint/typecheck/test scripts and document commands.
-- [ ] Create typed boundaries for game, learning, and persistence.
-- [ ] Add title/loading/error screen.
-- [ ] Verify install, local run, typecheck, lint and tests.
+- [x] Initialize clean Next.js App Router project with strict TypeScript.
+- [x] Add React Three Fiber, Three.js and Drei.
+- [x] Add Vitest and test scripts.
+- [x] Add lint/typecheck/test scripts and document commands.
+- [ ] Create typed boundaries for game, learning, and persistence. _(2026-10-14: `src/game` boundary exists; `learning/` and `persistence/` deferred until the learning contract and dataset are validated — see constitution §9.)_
+- [x] Add title/loading/error screen.
+- [x] Verify install, local run, typecheck, lint and tests.
 
 ## Phase 2 — First scene
-- [ ] Dynamically load client-only GameCanvas.
-- [ ] Render sky/background, ground, path, placeholder hills and trees.
-- [ ] Add simple lighting and low-cost materials.
-- [ ] Add scene loading and WebGL error fallback.
-- [ ] Verify no console errors or server-side WebGL access.
+- [x] Dynamically load client-only GameCanvas.
+- [x] Render sky/background, ground, path, placeholder hills and trees.
+- [x] Add simple lighting and low-cost materials.
+- [x] Add scene loading and WebGL error fallback.
+- [x] Verify no console errors or server-side WebGL access.
 
 ## Phase 3 — Character and movement
 - [ ] Add placeholder Fern using simple geometry or licensed GLB.
@@ -87,3 +87,12 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 - [ ] No API secrets in client assets.
 - [ ] Asset sources/licenses are documented.
 - [ ] Known limitations are documented.
+
+## Milestone notes
+
+### 2026-10-14 — Milestone 2 (3D meadow) verified
+- Spec Kit 1.1.3 (Claude integration, PowerShell scripts) resolves the feature via the git-ignored `.specify/feature.json`, which points at `spelling-adventure-3d-speckit/specs/001-spelling-adventure-3d`. The spec pack was left in place rather than moved.
+- Stack pinned: Next 16.4.0, React 19.3.0, three 0.186.1, @react-three/fiber 9.8.1, @react-three/drei 10.7.9, Vitest 5.0.4, TypeScript 5.9.3.
+- three r186 removed `PCFSoftShadowMap`; the canvas uses `shadows="percentage"` (PCF). `THREE.Clock` deprecation warning comes from R3F internals, not project code.
+- Verified in Chrome: desktop 1114×809, phone portrait 373×839 and landscape 675×355 viewports; WebGL context loss → error card → Try again → recovered. Production build prerenders `/` as static content.
+- Not yet done: baseline Android device/WebView, hosting target, learning contract and dataset access, asset licences (spec §10 open questions).

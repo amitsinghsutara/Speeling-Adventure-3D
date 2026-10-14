@@ -1,0 +1,104 @@
+export type QualityLevel = "low" | "medium" | "high";
+
+export interface QualitySettings {
+  readonly level: QualityLevel;
+  /** Upper bound for the device pixel ratio the renderer is allowed to use. */
+  readonly maxPixelRatio: number;
+  readonly shadows: boolean;
+  readonly shadowMapSize: number;
+  readonly antialias: boolean;
+  readonly treeCount: number;
+  readonly flowerCount: number;
+  readonly rockCount: number;
+  readonly cloudCount: number;
+}
+
+/**
+ * Scalable quality presets. Counts are deliberately small: the first
+ * milestone is a compact meadow, not a forest, and entry-level Android phones
+ * are the baseline.
+ */
+export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = {
+  low: {
+    level: "low",
+    maxPixelRatio: 1,
+    shadows: false,
+    shadowMapSize: 0,
+    antialias: false,
+    treeCount: 18,
+    flowerCount: 50,
+    rockCount: 8,
+    cloudCount: 5,
+  },
+  medium: {
+    level: "medium",
+    maxPixelRatio: 1.5,
+    shadows: false,
+    shadowMapSize: 0,
+    antialias: true,
+    treeCount: 30,
+    flowerCount: 100,
+    rockCount: 12,
+    cloudCount: 7,
+  },
+  high: {
+    level: "high",
+    maxPixelRatio: 2,
+    shadows: true,
+    shadowMapSize: 1024,
+    antialias: true,
+    treeCount: 44,
+    flowerCount: 160,
+    rockCount: 14,
+    cloudCount: 9,
+  },
+};
+
+export interface DeviceHints {
+  /** `navigator.hardwareConcurrency`, when exposed. */
+  readonly logicalCores?: number;
+  /** `navigator.deviceMemory` in GiB (Chromium only, capped at 8). */
+  readonly deviceMemoryGb?: number;
+  /** True when the primary pointer is a finger (phones and tablets). */
+  readonly coarsePointer: boolean;
+  readonly reducedMotion: boolean;
+}
+
+/**
+ * Conservative heuristic for the default quality level. It can be overridden
+ * by an explicit user setting later; it is intentionally biased towards
+ * "medium" on touch devices because real Android measurements are still
+ * pending (see spec FR-10).
+ */
+export function detectDefaultQuality(hints: DeviceHints): QualityLevel {
+  const cores = hints.logicalCores ?? 4;
+  const memory = hints.deviceMemoryGb ?? 4;
+
+  if (hints.coarsePointer) {
+    if (memory <= 3 || cores <= 4) return "low";
+    return "medium";
+  }
+  if (memory <= 2 || cores <= 2) return "medium";
+  return "high";
+}
+
+interface NavigatorLike {
+  hardwareConcurrency?: number;
+  deviceMemory?: number;
+}
+
+interface WindowLike {
+  navigator: NavigatorLike;
+  matchMedia?: (query: string) => { matches: boolean };
+}
+
+export function readDeviceHints(win: WindowLike): DeviceHints {
+  const matches = (query: string): boolean =>
+    typeof win.matchMedia === "function" ? win.matchMedia(query).matches : false;
+  return {
+    logicalCores: win.navigator.hardwareConcurrency,
+    deviceMemoryGb: win.navigator.deviceMemory,
+    coarsePointer: matches("(pointer: coarse)"),
+    reducedMotion: matches("(prefers-reduced-motion: reduce)"),
+  };
+}
