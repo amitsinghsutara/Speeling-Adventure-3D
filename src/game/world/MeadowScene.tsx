@@ -12,6 +12,7 @@ import { Rocks } from "./Rocks";
 import { Signpost } from "./Signpost";
 import { SkyDome } from "./SkyDome";
 import { Trees } from "./Trees";
+import { WindDriver } from "./WindDriver";
 
 export interface MeadowSceneProps {
   layout: MeadowLayout;
@@ -40,6 +41,7 @@ export function MeadowScene({
       <Rocks rocks={layout.rocks} />
       <Flowers flowers={layout.flowers} />
       <Clouds clouds={layout.clouds} reducedMotion={reducedMotion} />
+      <WindDriver reducedMotion={reducedMotion} />
       {layout.interactables.map((item) => (
         <Signpost
           key={item.id}

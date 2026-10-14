@@ -15,6 +15,8 @@ export interface DebugSnapshot {
   animation: CharacterAnimationState;
   cameraYaw: number;
   frames: number;
+  /** Shared wind clock in seconds (0 and frozen under reduced motion). */
+  windTime: number;
 }
 
 declare global {
@@ -37,6 +39,7 @@ export function getDebugSnapshot(): DebugSnapshot | null {
       animation: "idle",
       cameraYaw: 0,
       frames: 0,
+      windTime: 0,
     };
   }
   return window.__spellingAdventureDebug;

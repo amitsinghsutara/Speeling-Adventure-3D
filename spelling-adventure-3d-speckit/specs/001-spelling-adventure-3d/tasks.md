@@ -149,3 +149,6 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 ### 2026-10-14 — Grown-ups screen
 - `HoldButton` child gate (press-and-hold 1.8 s; tap, early release, slide-off and keyboard cancel are tested) in the HUD opens `GrownUpsScreen`: overview, per-level status with stars earned/max, tricky spots named from the codebook, words to practise, an "about these numbers" note (on-device only, provisional rules, never "mastered"), device facts (durable storage, stored answers, offline readiness, content version, build id) and a confirmed **Reset progress** that clears IndexedDB and rebuilds the service, quest state and persistence without reloading.
 - Movement and keys are suspended while the screen is open; touch controls hide. No AI suggestions (spec FR-12).
+
+### 2026-10-14 — Wind
+- Vertex-shader wind on the shared tree canopy, trunk, blossom and stem materials (`src/game/world/wind.ts`, applied in `materials.ts`): height-weighted sway with a per-instance phase and a slow gust cycle, driven by one shared clock (`WindDriver`). No per-frame CPU work, no extra draw calls; shadows keep the resting shape to stay cheap. Frozen and calm under `prefers-reduced-motion`. Pure shader patch and clock are unit-tested; compiled without errors in Chrome at the same frame rate as before.

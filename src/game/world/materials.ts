@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { applyWind, createWindUniforms, type WindUniforms } from "./wind";
 
 /**
  * Shared, lazily created materials. Every instanced mesh in the meadow reuses
@@ -22,13 +23,17 @@ export interface SharedMaterials {
   readonly foxOrange: THREE.MeshLambertMaterial;
   readonly foxCream: THREE.MeshLambertMaterial;
   readonly foxDark: THREE.MeshLambertMaterial;
+  /** Shared wind clock used by the swaying materials. */
+  readonly wind: WindUniforms;
 }
 
 let cache: SharedMaterials | null = null;
 
 export function getSharedMaterials(): SharedMaterials {
   if (cache) return cache;
+  const wind = createWindUniforms();
   cache = {
+    wind,
     ground: new THREE.MeshLambertMaterial({ color: "#6fcf5f" }),
     path: new THREE.MeshLambertMaterial({
       color: "#dcb784",
@@ -54,5 +59,11 @@ export function getSharedMaterials(): SharedMaterials {
     foxCream: new THREE.MeshLambertMaterial({ color: "#fff1d6" }),
     foxDark: new THREE.MeshLambertMaterial({ color: "#3b2a24" }),
   };
+  // Wind sway (vertex shader). Local-space ranges match each geometry:
+  // canopy sphere r=1, trunk cylinder h=1, blossom sphere r=0.15, stem h=0.32.
+  applyWind(cache.canopy, wind, { baseY: -1, spanY: 2, amplitude: 0.14 });
+  applyWind(cache.trunk, wind, { baseY: -0.5, spanY: 1, amplitude: 0.03 });
+  applyWind(cache.flower, wind, { baseY: -0.15, spanY: 0.3, amplitude: 0.08 });
+  applyWind(cache.stem, wind, { baseY: -0.16, spanY: 0.32, amplitude: 0.08 });
   return cache;
 }
