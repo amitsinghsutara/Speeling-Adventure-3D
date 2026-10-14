@@ -1,3 +1,4 @@
+import type { WorldInteractable } from "@/game/quest/interactables";
 import { sampleCatmullRom } from "./curve";
 import { createRandom, randomBetween } from "./random";
 import { distanceToPolylineXZ, distanceXZ, type Vec3 } from "./vec";
@@ -65,6 +66,8 @@ export interface CloudPlacement {
 
 export interface MeadowLayout {
   readonly seed: number;
+  /** Signposts and other things Fern can interact with. */
+  readonly interactables: readonly WorldInteractable[];
   readonly mainPath: readonly Vec3[];
   readonly branchPath: readonly Vec3[];
   readonly trees: readonly TreePlacement[];
@@ -112,6 +115,25 @@ export function generateMeadowLayout(
   const paths = [mainPath, branchPath];
 
   const fernSpawn: Vec3 = [0, 0, 21];
+  // Each sign starts one curriculum puzzle (level-N/puzzle-M, see learning/puzzles.ts).
+  const interactables: WorldInteractable[] = [
+    {
+      id: "sign-meadow-1",
+      kind: "spelling-sign",
+      promptKey: "prompt.sign.read",
+      position: [3.1, 0, 12.5],
+      interactionRadius: 2.6,
+      questId: "level-1/puzzle-1",
+    },
+    {
+      id: "sign-meadow-2",
+      kind: "spelling-sign",
+      promptKey: "prompt.sign.read",
+      position: [-18.5, 0, -10.5],
+      interactionRadius: 2.6,
+      questId: "level-1/puzzle-2",
+    },
+  ];
   const fernSpawnYaw = 0;
   const cameraStart: Vec3 = [0, 4.4, 29];
   const cameraTarget: Vec3 = [0, 1, 20];
@@ -139,6 +161,7 @@ export function generateMeadowLayout(
     const position = randomPointInDisc(MEADOW_RADIUS - 2, 6);
     if (pathDistance(position) < PATH_CLEARANCE) continue;
     if (distanceXZ(position, fernSpawn) < SPAWN_CLEARANCE) continue;
+    if (interactables.some((i) => distanceXZ(i.position, position) < 3)) continue;
     if (trees.some((t) => distanceXZ(t.position, position) < TREE_SPACING)) {
       continue;
     }
@@ -191,6 +214,7 @@ export function generateMeadowLayout(
     const position = randomPointInDisc(MEADOW_RADIUS - 4, 5);
     if (pathDistance(position) < 2.2) continue;
     if (distanceXZ(position, fernSpawn) < SPAWN_CLEARANCE) continue;
+    if (interactables.some((i) => distanceXZ(i.position, position) < 2.5)) continue;
     if (trees.some((t) => distanceXZ(t.position, position) < 1.8)) continue;
     rocks.push({
       position,
@@ -210,6 +234,7 @@ export function generateMeadowLayout(
     const position = randomPointInDisc(MEADOW_RADIUS - 6);
     if (pathDistance(position) < PATH_WIDTH / 2 + 0.5) continue;
     if (distanceXZ(position, fernSpawn) < 1.5) continue;
+    if (interactables.some((i) => distanceXZ(i.position, position) < 1)) continue;
     flowers.push({
       position,
       colorIndex: Math.floor(next() * FLOWER_COLORS.length),
@@ -236,6 +261,7 @@ export function generateMeadowLayout(
 
   return {
     seed,
+    interactables,
     mainPath,
     branchPath,
     trees,

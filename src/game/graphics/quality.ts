@@ -82,6 +82,21 @@ export function detectDefaultQuality(hints: DeviceHints): QualityLevel {
   return "high";
 }
 
+export function isQualityLevel(value: unknown): value is QualityLevel {
+  return value === "low" || value === "medium" || value === "high";
+}
+
+/**
+ * Final quality level: an explicit override (user setting or `?quality=`
+ * query parameter for device testing) wins over the heuristic.
+ */
+export function resolveQualityLevel(
+  hints: DeviceHints,
+  override: unknown,
+): QualityLevel {
+  return isQualityLevel(override) ? override : detectDefaultQuality(hints);
+}
+
 interface NavigatorLike {
   hardwareConcurrency?: number;
   deviceMemory?: number;

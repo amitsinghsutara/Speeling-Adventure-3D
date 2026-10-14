@@ -15,6 +15,10 @@ export interface SharedMaterials {
   readonly flower: THREE.MeshLambertMaterial;
   readonly stem: THREE.MeshLambertMaterial;
   readonly cloud: THREE.MeshBasicMaterial;
+  readonly signWood: THREE.MeshLambertMaterial;
+  readonly signBoard: THREE.MeshLambertMaterial;
+  readonly marker: THREE.MeshBasicMaterial;
+  readonly markerActive: THREE.MeshBasicMaterial;
   readonly foxOrange: THREE.MeshLambertMaterial;
   readonly foxCream: THREE.MeshLambertMaterial;
   readonly foxDark: THREE.MeshLambertMaterial;
@@ -42,6 +46,10 @@ export function getSharedMaterials(): SharedMaterials {
     flower: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
     stem: new THREE.MeshLambertMaterial({ color: "#3f9c3a" }),
     cloud: new THREE.MeshBasicMaterial({ color: "#ffffff" }),
+    signWood: new THREE.MeshLambertMaterial({ color: "#8a5a2b", flatShading: true }),
+    signBoard: new THREE.MeshLambertMaterial({ color: "#c9893f", flatShading: true }),
+    marker: new THREE.MeshBasicMaterial({ color: "#fff1a8" }),
+    markerActive: new THREE.MeshBasicMaterial({ color: "#ffd23f" }),
     foxOrange: new THREE.MeshLambertMaterial({ color: "#f28c28" }),
     foxCream: new THREE.MeshLambertMaterial({ color: "#fff1d6" }),
     foxDark: new THREE.MeshLambertMaterial({ color: "#3b2a24" }),

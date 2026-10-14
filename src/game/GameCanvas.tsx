@@ -1,24 +1,47 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { RendererError } from "./graphics/errors";
 import {
   QUALITY_PRESETS,
-  detectDefaultQuality,
   readDeviceHints,
+  resolveQualityLevel,
   type DeviceHints,
 } from "./graphics/quality";
 import { describeWebGLSupport } from "./graphics/webgl";
+import type { InputHub } from "./input/inputHub";
+import type { WorldInteractable } from "./quest/interactables";
+import { attachKeyboard } from "./input/keyboard";
+import { PlayerRig } from "./PlayerRig";
 import { generateMeadowLayout } from "./world/layout";
 import { MeadowScene } from "./world/MeadowScene";
 
 export interface GameCanvasProps {
+  input: InputHub;
+  /** Interactable currently in range; drives the signpost affordance. */
+  activeInteractableId: string | null;
+  onProximity: (interactable: WorldInteractable | null) => void;
+  onInteract: (interactable: WorldInteractable) => void;
   /** Called once the first frame has actually been rendered. */
   onReady: () => void;
   /** Called when the renderer cannot start or stops working. */
   onError: (error: unknown) => void;
+}
+
+/** Pointer capture can throw for synthetic or already-released pointers; never let that break input. */
+function capturePointer(element: Element, pointerId: number): void {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // Ignore: capture is a nicety, not a requirement.
+  }
 }
 
 const FALLBACK_HINTS: DeviceHints = {
@@ -30,13 +53,26 @@ const FALLBACK_HINTS: DeviceHints = {
  * Client-only entry point for the 3D world. This module is imported with
  * `ssr: false`, so nothing in here runs on the server.
  */
-export function GameCanvas({ onReady, onError }: GameCanvasProps) {
+export function GameCanvas({
+  input,
+  activeInteractableId,
+  onProximity,
+  onInteract,
+  onReady,
+  onError,
+}: GameCanvasProps) {
   const support = useMemo(() => describeWebGLSupport(), []);
   const hints = useMemo(
     () => (typeof window === "undefined" ? FALLBACK_HINTS : readDeviceHints(window)),
     [],
   );
-  const quality = QUALITY_PRESETS[detectDefaultQuality(hints)];
+  const quality = useMemo(() => {
+    const override =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("quality");
+    return QUALITY_PRESETS[resolveQualityLevel(hints, override)];
+  }, [hints]);
   const layout = useMemo(
     () =>
       generateMeadowLayout({
@@ -54,10 +90,38 @@ export function GameCanvas({ onReady, onError }: GameCanvasProps) {
     }
   }, [support, onError]);
 
+  useEffect(() => attachKeyboard(input, window), [input]);
+
+  // Drag anywhere on the canvas (mouse or finger) to orbit the camera.
+  const lookPointer = useRef<{ id: number; x: number; y: number } | null>(null);
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (lookPointer.current) return;
+    lookPointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    capturePointer(event.currentTarget, event.pointerId);
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const active = lookPointer.current;
+    if (!active || active.id !== event.pointerId) return;
+    input.addLook(event.clientX - active.x, event.clientY - active.y);
+    active.x = event.clientX;
+    active.y = event.clientY;
+  };
+  const onPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (lookPointer.current?.id === event.pointerId) lookPointer.current = null;
+  };
+
   if (!support.supported) return null;
 
   return (
-    <div className="game-canvas" data-quality={quality.level}>
+    <div
+      className="game-canvas"
+      data-quality={quality.level}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
       <Canvas
         flat
         dpr={[1, quality.maxPixelRatio]}
@@ -83,21 +147,16 @@ export function GameCanvas({ onReady, onError }: GameCanvasProps) {
             layout={layout}
             quality={quality}
             reducedMotion={hints.reducedMotion}
+            activeInteractableId={activeInteractableId}
+          />
+          <PlayerRig
+            layout={layout}
+            input={input}
+            reducedMotion={hints.reducedMotion}
+            onProximity={onProximity}
+            onInteract={onInteract}
           />
         </Suspense>
-        {/* Temporary look-around controls until the third-person camera lands. */}
-        <OrbitControls
-          makeDefault
-          target={[...layout.cameraTarget]}
-          enablePan={false}
-          enableDamping
-          dampingFactor={0.08}
-          rotateSpeed={0.6}
-          minDistance={4}
-          maxDistance={18}
-          minPolarAngle={0.35}
-          maxPolarAngle={Math.PI / 2 - 0.08}
-        />
       </Canvas>
     </div>
   );

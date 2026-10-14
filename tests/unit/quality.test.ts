@@ -3,6 +3,7 @@ import {
   QUALITY_PRESETS,
   detectDefaultQuality,
   readDeviceHints,
+  resolveQualityLevel,
 } from "@/game/graphics/quality";
 
 describe("detectDefaultQuality", () => {
@@ -80,5 +81,19 @@ describe("readDeviceHints", () => {
     expect(hints.coarsePointer).toBe(false);
     expect(hints.reducedMotion).toBe(false);
     expect(hints.logicalCores).toBeUndefined();
+  });
+});
+
+describe("resolveQualityLevel", () => {
+  const desktop = { coarsePointer: false, reducedMotion: false };
+
+  it("uses the heuristic when there is no valid override", () => {
+    expect(resolveQualityLevel(desktop, null)).toBe("high");
+    expect(resolveQualityLevel(desktop, "ultra")).toBe("high");
+  });
+
+  it("honours a valid override", () => {
+    expect(resolveQualityLevel(desktop, "low")).toBe("low");
+    expect(resolveQualityLevel({ ...desktop, coarsePointer: true }, "high")).toBe("high");
   });
 });

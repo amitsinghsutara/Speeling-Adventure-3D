@@ -39,13 +39,23 @@ src/game/           Client-only 3D world
   GameCanvas.tsx    React Three Fiber canvas, WebGL probe, context-loss watchdog
   graphics/         Quality presets, device heuristics, renderer errors (pure TS)
   world/            Meadow layout data (pure TS) and the R3F components that draw it
-  character/        Character visual contract + placeholder Fern
+  character/        Character visual contract, pure controller, placeholder Fern
+  camera/           Pure third-person follow camera
+  input/            Input hub, keyboard bindings, joystick maths, control-mode detection
+  PlayerRig.tsx     Per-frame integrator: input → controller → collisions → camera → proximity
+  quest/            Interactable contract, quest state machine + controller, rewards, letter tiles
+  audio/            Word prompt (speech synthesis with reveal fallback)
+src/learning/       Framework-free learning layer: imported curriculum (content/), puzzles, questions, service, events
+src/persistence/    Versioned progress schema, repository interface, IndexedDB + memory implementations
+src/offline/        Service worker registration, precache list, offline status
+public/sw.js        Hand-written service worker (versioned cache per build)
+public/manifest.webmanifest, public/icons/   PWA manifest and placeholder icons
 tests/unit/         Pure-logic tests (layout rules, path geometry, quality, WebGL probe)
 tests/smoke/        Server-render smoke test and shell state-machine test
 ```
 
-Learning, persistence, quests and input are intentionally absent in this
-milestone; see `spelling-adventure-3d-speckit/specs/001-spelling-adventure-3d/tasks.md`.
+Art/audio replacement and the performance/release pass are still to come; see
+`spelling-adventure-3d-speckit/specs/001-spelling-adventure-3d/tasks.md`.
 
 ## Current status
 
@@ -60,4 +70,60 @@ Milestone 2 ("3D meadow with placeholder geometry") is implemented:
   recovery via **Try again**.
 - Quality presets (low/medium/high) chosen from device hints;
   `prefers-reduced-motion` disables ambient animation.
-- Temporary orbit controls (drag/swipe) for inspecting the scene.
+
+Milestone 3 ("character controller, camera and inputs") is implemented:
+
+- Fern idles, walks (3.2 m/s) and runs (6.4 m/s) with frame-rate independent
+  movement; trunks, rocks and the meadow edge block her.
+- Smoothed third-person camera that swings behind Fern while she moves, pulls
+  in when a tree is in the way, and can be orbited by dragging on the canvas.
+- Keyboard: WASD or arrows, Shift to run, E / Space / Enter to interact.
+  Touch: on-screen joystick and a large interact button (auto-detected, or
+  force with `?controls=touch` / `?controls=keyboard`).
+- `?quality=low|medium|high` overrides the quality heuristic for device tests.
+- In development, `window.__spellingAdventureDebug` exposes position, speed
+  and animation state for automation and profiling.
+
+Milestone 4 ("interaction and quest") is implemented:
+
+- A signpost by the path shows a prompt when Fern is in range; E, Space, Enter
+  or the touch button opens a spelling challenge.
+- The challenge dialog builds the word from large letter tiles (or the
+  keyboard), gives supportive feedback, allows unlimited retries and can be
+  cancelled at any time. A correct answer grants a star, shown in the HUD.
+- The game only talks to learning through the `LearningService` interface.
+  Rewards never touch the learning layer.
+
+Milestone 5 ("progress and persistence") is implemented:
+
+- Completed quests and stars are saved to IndexedDB (database
+  `spelling-adventure-3d`) and restored before the game shows the meadow.
+- Learning events are stored durably; failed writes are retried and never
+  silently dropped. Corrupted data is moved to a backup key, not deleted.
+- When IndexedDB is unavailable the game still runs on an in-memory store
+  and says so in the HUD.
+- `?reset=progress` clears local progress and events (development aid).
+
+Milestone 6 ("offline / PWA") is implemented:
+
+- A service worker caches the app shell and every build asset the game
+  loaded, under a cache named after the build id. Old caches are removed only
+  after the new worker has installed. The HUD shows "Ready to play offline"
+  only after the worker confirms the cache is complete.
+- Registration happens in production builds only (`npm run build && npm start`);
+  add `?sw=1` to test it in development, or `?sw=0` to disable it.
+- `NEXT_OUTPUT_EXPORT=1 npm run build` produces a static export in `out/` for
+  static hosts; the default build runs on any Node host.
+
+## Curriculum content
+
+The spelling content is the owner's validated curriculum, imported from the
+sibling project `D:Speeling Game 3` with hashes and update steps recorded in
+`src/learning/content/PROVENANCE.md`: 10 levels, 200 target words, each with
+three approved foils from a foil codebook, plus a bundled MP3 per word.
+
+- A sign starts one puzzle (five words in curriculum order). The child hears
+  the word and picks it among four tiles; wrong tiles are disabled with a
+  hint, and the puzzle awards 1 to 3 stars by mistakes. Puzzles unlock in order.
+- The source's adaptive strategies and learner model are not ported yet;
+  mastery is never claimed.

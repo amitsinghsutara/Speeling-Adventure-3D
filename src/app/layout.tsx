@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   description:
     "Explore a friendly forest meadow with Fern the fox and discover spelling quests.",
   applicationName: "Spelling Adventure 3D",
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-192.png" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Spelling 3D" },
 };
 
 export const viewport: Viewport = {

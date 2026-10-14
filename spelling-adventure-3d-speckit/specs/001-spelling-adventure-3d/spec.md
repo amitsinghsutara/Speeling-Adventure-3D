@@ -120,3 +120,11 @@ Resolve during clarification, do not guess:
 - Hosting target (Node-capable host vs static deployment plus separate functions).
 - Character model/animation source and licenses.
 - Accessibility/localization languages.
+
+### Resolution notes (2026-10-14)
+Answered by importing the owner's authoritative project `D:Speeling Game 3` (see `src/learning/content/PROVENANCE.md`):
+- Authoritative dataset: `English_Spelling_Words_and_Foils.xlsx` → validated `curriculum.generated.json` (200 items, 10 levels, 18 foil codes). Import permission: granted by the owner on 2026-10-14.
+- Foil labels: defined by the FoilCodebook sheet (name, definition, example, probe, difficulty tier 1–4). Curriculum/skill mapping: one skill pattern per level (`level-N`).
+- Audio: bundled MP3 per target word; speech synthesis is the fallback. Licence/origin of the recordings is not documented in the source and must be confirmed.
+- Challenge format: hear the word, choose among the target and its approved foils (never letter tiles or generated distractors).
+Still open: hosting target, baseline Android device/WebView, retry/hint/mastery thresholds (provisional in the source), offline sync, character model licence, localisation.
