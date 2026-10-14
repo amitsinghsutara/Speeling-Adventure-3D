@@ -8,6 +8,8 @@ export interface QualitySettings {
   readonly shadowMapSize: number;
   readonly antialias: boolean;
   readonly treeCount: number;
+  readonly forestTreeCount: number;
+  readonly bushCount: number;
   readonly flowerCount: number;
   readonly rockCount: number;
   readonly cloudCount: number;
@@ -25,7 +27,9 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: false,
     shadowMapSize: 0,
     antialias: false,
-    treeCount: 18,
+    treeCount: 22,
+    forestTreeCount: 90,
+    bushCount: 20,
     flowerCount: 50,
     rockCount: 8,
     cloudCount: 5,
@@ -36,7 +40,9 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: false,
     shadowMapSize: 0,
     antialias: true,
-    treeCount: 30,
+    treeCount: 34,
+    forestTreeCount: 160,
+    bushCount: 36,
     flowerCount: 100,
     rockCount: 12,
     cloudCount: 7,
@@ -47,7 +53,9 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: true,
     shadowMapSize: 1024,
     antialias: true,
-    treeCount: 44,
+    treeCount: 46,
+    forestTreeCount: 240,
+    bushCount: 56,
     flowerCount: 160,
     rockCount: 14,
     cloudCount: 9,

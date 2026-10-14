@@ -11,6 +11,11 @@ export const PATH_WIDTH = 2.6;
 /** Minimum distance from the path centreline to any tree trunk. */
 export const PATH_CLEARANCE = 3.4;
 export const TREE_SPACING = 2.6;
+/** The dense tree belt that encloses the meadow, outside the playable edge. */
+export const FOREST_INNER_RADIUS = MEADOW_RADIUS - 2;
+export const FOREST_OUTER_RADIUS = 50;
+export const FOREST_SPACING = 1.9;
+export const BUSH_SPACING = 1.4;
 export const SPAWN_CLEARANCE = 4.5;
 export const DEFAULT_SEED = 20261014;
 
@@ -31,10 +36,26 @@ const BRANCH_PATH_CONTROL: readonly Vec3[] = [
   [-21, 0, -9],
 ];
 
+export type TreeKind = "conifer" | "round";
+
 export interface TreePlacement {
   readonly position: Vec3;
+  readonly kind: TreeKind;
   readonly trunkHeight: number;
+  /** Canopy radius for round trees; tier scale for conifers. */
   readonly canopyRadius: number;
+  readonly colorIndex: number;
+  readonly rotationY: number;
+  /** Small random lean (radians) so rows never look planted. */
+  readonly leanX: number;
+  readonly leanZ: number;
+  /** True for trees in the enclosing belt (outside the playable area). */
+  readonly inForestBelt: boolean;
+}
+
+export interface BushPlacement {
+  readonly position: Vec3;
+  readonly scale: number;
   readonly colorIndex: number;
   readonly rotationY: number;
 }
@@ -71,6 +92,7 @@ export interface MeadowLayout {
   readonly mainPath: readonly Vec3[];
   readonly branchPath: readonly Vec3[];
   readonly trees: readonly TreePlacement[];
+  readonly bushes: readonly BushPlacement[];
   readonly hills: readonly HillPlacement[];
   readonly rocks: readonly RockPlacement[];
   readonly flowers: readonly FlowerPlacement[];
@@ -84,7 +106,11 @@ export interface MeadowLayout {
 
 export interface MeadowLayoutOptions {
   readonly seed?: number;
+  /** Trees inside the meadow (around the paths). */
   readonly treeCount: number;
+  /** Trees in the dense belt around the meadow edge. */
+  readonly forestTreeCount: number;
+  readonly bushCount: number;
   readonly flowerCount: number;
   readonly rockCount: number;
   readonly cloudCount: number;
@@ -92,6 +118,8 @@ export interface MeadowLayoutOptions {
 
 export const HILL_COLORS = ["#5cbf4f", "#67c95a", "#52b347", "#74d166"] as const;
 export const CANOPY_COLORS = ["#4fb848", "#5fc957", "#3fa63c", "#79d46c"] as const;
+export const CONIFER_COLORS = ["#2f7d3f", "#368a49", "#2a6f39", "#3f9552", "#2c7a44"] as const;
+export const BUSH_COLORS = ["#4aa848", "#5bb556", "#3e9a40"] as const;
 export const FLOWER_COLORS = [
   "#ff6f91",
   "#ffd23f",
@@ -151,7 +179,24 @@ export function generateMeadowLayout(
   };
 
   // ---- Trees -------------------------------------------------------------
+  // Mostly conifers (the "Christmas tree" silhouette) with a few round trees
+  // for variety; sizes, lean and colour vary so nothing looks planted.
   const trees: TreePlacement[] = [];
+  const makeTree = (position: Vec3, inForestBelt: boolean): TreePlacement => {
+    const kind: TreeKind = next() < (inForestBelt ? 0.9 : 0.75) ? "conifer" : "round";
+    const size = inForestBelt ? randomBetween(next, 1.0, 1.6) : randomBetween(next, 0.85, 1.35);
+    return {
+      position,
+      kind,
+      trunkHeight: kind === "conifer" ? randomBetween(next, 0.9, 1.4) * size : randomBetween(next, 1.1, 1.8),
+      canopyRadius: kind === "conifer" ? size : randomBetween(next, 1.2, 1.9),
+      colorIndex: Math.floor(next() * (kind === "conifer" ? CONIFER_COLORS.length : CANOPY_COLORS.length)),
+      rotationY: randomBetween(next, 0, Math.PI * 2),
+      leanX: randomBetween(next, -0.05, 0.05),
+      leanZ: randomBetween(next, -0.05, 0.05),
+      inForestBelt,
+    };
+  };
   const maxTreeAttempts = options.treeCount * 60;
   for (
     let attempt = 0;
@@ -165,11 +210,47 @@ export function generateMeadowLayout(
     if (trees.some((t) => distanceXZ(t.position, position) < TREE_SPACING)) {
       continue;
     }
-    trees.push({
+    trees.push(makeTree(position, false));
+  }
+  // The belt: dense, mostly conifers, beyond the playable edge so it is
+  // scenery rather than obstacles, with a gap where the branch path leaves.
+  const beltTrees: TreePlacement[] = [];
+  const maxBeltAttempts = options.forestTreeCount * 40;
+  for (
+    let attempt = 0;
+    attempt < maxBeltAttempts && beltTrees.length < options.forestTreeCount;
+    attempt += 1
+  ) {
+    const position = randomPointInDisc(FOREST_OUTER_RADIUS, FOREST_INNER_RADIUS);
+    if (pathDistance(position) < PATH_CLEARANCE) continue;
+    if (beltTrees.some((t) => distanceXZ(t.position, position) < FOREST_SPACING)) continue;
+    if (trees.some((t) => distanceXZ(t.position, position) < FOREST_SPACING)) continue;
+    beltTrees.push(makeTree(position, true));
+  }
+  trees.push(...beltTrees);
+
+  // ---- Bushes (low undergrowth near trees and the meadow edge) -----------
+  const bushes: BushPlacement[] = [];
+  const maxBushAttempts = options.bushCount * 40;
+  for (
+    let attempt = 0;
+    attempt < maxBushAttempts && bushes.length < options.bushCount;
+    attempt += 1
+  ) {
+    const position = randomPointInDisc(FOREST_INNER_RADIUS + 4, 5);
+    if (pathDistance(position) < PATH_WIDTH / 2 + 1.2) continue;
+    if (distanceXZ(position, fernSpawn) < SPAWN_CLEARANCE) continue;
+    if (interactables.some((i) => distanceXZ(i.position, position) < 2)) continue;
+    if (trees.some((t) => distanceXZ(t.position, position) < 1.1)) continue;
+    if (bushes.some((b) => distanceXZ(b.position, position) < BUSH_SPACING)) continue;
+    // Prefer spots near a tree or the edge so bushes cluster naturally.
+    const nearTree = trees.some((t) => distanceXZ(t.position, position) < 4);
+    const nearEdge = Math.hypot(position[0], position[2]) > MEADOW_RADIUS - 8;
+    if (!nearTree && !nearEdge && next() < 0.7) continue;
+    bushes.push({
       position,
-      trunkHeight: randomBetween(next, 1.1, 1.8),
-      canopyRadius: randomBetween(next, 1.2, 1.9),
-      colorIndex: Math.floor(next() * CANOPY_COLORS.length),
+      scale: randomBetween(next, 0.5, 1.0),
+      colorIndex: Math.floor(next() * BUSH_COLORS.length),
       rotationY: randomBetween(next, 0, Math.PI * 2),
     });
   }
@@ -213,6 +294,7 @@ export function generateMeadowLayout(
   ) {
     const position = randomPointInDisc(MEADOW_RADIUS - 4, 5);
     if (pathDistance(position) < 2.2) continue;
+    if (bushes.some((b) => distanceXZ(b.position, position) < 1.2)) continue;
     if (distanceXZ(position, fernSpawn) < SPAWN_CLEARANCE) continue;
     if (interactables.some((i) => distanceXZ(i.position, position) < 2.5)) continue;
     if (trees.some((t) => distanceXZ(t.position, position) < 1.8)) continue;
@@ -265,6 +347,7 @@ export function generateMeadowLayout(
     mainPath,
     branchPath,
     trees,
+    bushes,
     hills,
     rocks,
     flowers,

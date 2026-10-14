@@ -46,6 +46,8 @@ describe("buildColliders", () => {
     const layout = generateMeadowLayout({
       seed: 7,
       treeCount: 10,
+      forestTreeCount: 0,
+      bushCount: 0,
       flowerCount: 5,
       rockCount: 3,
       cloudCount: 1,

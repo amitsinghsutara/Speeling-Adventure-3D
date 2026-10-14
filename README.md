@@ -63,7 +63,7 @@ Milestone 2 ("3D meadow with placeholder geometry") is implemented:
 
 - Client-only scene; the server never initialises WebGL.
 - Gradient sky, drifting clouds, rolling hills, ground, main path plus one
-  branch, instanced trees, rocks and flowers, warm directional lighting, and
+  branch, a dense instanced conifer forest with bushes, rocks and flowers, warm directional lighting, and
   GPU wind sway on trees and flowers (off under reduced motion).
 - Placeholder Fern (primitives) with an idle bob; the controller seam is
   `CharacterVisualProps` in `src/game/character/types.ts`.

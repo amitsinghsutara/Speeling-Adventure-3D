@@ -22,6 +22,8 @@ export function buildColliders(layout: MeadowLayout): WorldColliders {
   const walk: CircleCollider[] = [];
   const camera: CircleCollider[] = [];
   for (const tree of layout.trees) {
+    // Belt trees sit outside the playable circle; skip them to keep per-frame checks small.
+    if (tree.inForestBelt && Math.hypot(tree.position[0], tree.position[2]) > PLAYABLE_RADIUS + 1) continue;
     walk.push({
       x: tree.position[0],
       z: tree.position[2],
@@ -32,6 +34,10 @@ export function buildColliders(layout: MeadowLayout): WorldColliders {
       z: tree.position[2],
       radius: tree.canopyRadius,
     });
+  }
+  for (const bush of layout.bushes) {
+    if (Math.hypot(bush.position[0], bush.position[2]) > PLAYABLE_RADIUS + 1) continue;
+    walk.push({ x: bush.position[0], z: bush.position[2], radius: bush.scale * 0.7 });
   }
   for (const item of layout.interactables) {
     walk.push({ x: item.position[0], z: item.position[2], radius: 0.35 });

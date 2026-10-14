@@ -1,6 +1,7 @@
 "use client";
 
 import type { QualitySettings } from "@/game/graphics/quality";
+import { Bushes } from "./Bushes";
 import { Clouds } from "./Clouds";
 import { Flowers } from "./Flowers";
 import { Ground } from "./Ground";
@@ -30,7 +31,7 @@ export function MeadowScene({
 }: MeadowSceneProps) {
   return (
     <>
-      <fog attach="fog" args={["#d4f0ff", 60, 170]} />
+      <fog attach="fog" args={["#cfeeff", 45, 150]} />
       <Lighting shadows={quality.shadows} shadowMapSize={quality.shadowMapSize} />
       <SkyDome />
       <Ground />
@@ -38,6 +39,7 @@ export function MeadowScene({
       <PathRibbon points={layout.branchPath} width={PATH_WIDTH * 0.8} />
       <Hills hills={layout.hills} />
       <Trees trees={layout.trees} />
+      <Bushes bushes={layout.bushes} />
       <Rocks rocks={layout.rocks} />
       <Flowers flowers={layout.flowers} />
       <Clouds clouds={layout.clouds} reducedMotion={reducedMotion} />

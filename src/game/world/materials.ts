@@ -12,6 +12,8 @@ export interface SharedMaterials {
   readonly hill: THREE.MeshLambertMaterial;
   readonly trunk: THREE.MeshLambertMaterial;
   readonly canopy: THREE.MeshLambertMaterial;
+  readonly conifer: THREE.MeshLambertMaterial;
+  readonly bush: THREE.MeshLambertMaterial;
   readonly rock: THREE.MeshLambertMaterial;
   readonly flower: THREE.MeshLambertMaterial;
   readonly stem: THREE.MeshLambertMaterial;
@@ -47,6 +49,8 @@ export function getSharedMaterials(): SharedMaterials {
       color: "#ffffff",
       flatShading: true,
     }),
+    conifer: new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }),
+    bush: new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }),
     rock: new THREE.MeshLambertMaterial({ color: "#9aa3ad", flatShading: true }),
     flower: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
     stem: new THREE.MeshLambertMaterial({ color: "#3f9c3a" }),
@@ -63,6 +67,9 @@ export function getSharedMaterials(): SharedMaterials {
   // canopy sphere r=1, trunk cylinder h=1, blossom sphere r=0.15, stem h=0.32.
   applyWind(cache.canopy, wind, { baseY: -1, spanY: 2, amplitude: 0.14 });
   applyWind(cache.trunk, wind, { baseY: -0.5, spanY: 1, amplitude: 0.03 });
+  // Cone tier: unit cone, height 1 centred at 0.
+  applyWind(cache.conifer, wind, { baseY: -0.5, spanY: 1, amplitude: 0.08 });
+  applyWind(cache.bush, wind, { baseY: -0.6, spanY: 1.2, amplitude: 0.04 });
   applyWind(cache.flower, wind, { baseY: -0.15, spanY: 0.3, amplitude: 0.08 });
   applyWind(cache.stem, wind, { baseY: -0.16, spanY: 0.32, amplitude: 0.08 });
   return cache;

@@ -77,6 +77,8 @@ export function GameCanvas({
     () =>
       generateMeadowLayout({
         treeCount: quality.treeCount,
+        forestTreeCount: quality.forestTreeCount,
+        bushCount: quality.bushCount,
         flowerCount: quality.flowerCount,
         rockCount: quality.rockCount,
         cloudCount: quality.cloudCount,

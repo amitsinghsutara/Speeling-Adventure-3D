@@ -152,3 +152,7 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 
 ### 2026-10-14 — Wind
 - Vertex-shader wind on the shared tree canopy, trunk, blossom and stem materials (`src/game/world/wind.ts`, applied in `materials.ts`): height-weighted sway with a per-instance phase and a slow gust cycle, driven by one shared clock (`WindDriver`). No per-frame CPU work, no extra draw calls; shadows keep the resting shape to stay cheap. Frozen and calm under `prefers-reduced-motion`. Pure shader patch and clock are unit-tested; compiled without errors in Chrome at the same frame rate as before.
+
+### 2026-10-14 — Conifer forest
+- Trees are now mostly conifers (three stacked cone tiers per tree, upper tiers slightly lighter) with some round trees; sizes, lean and colour vary per instance. A dense belt of trees (inner radius 32 to 50) encloses the meadow beyond the playable edge, with the paths kept clear; low bushes cluster near trees and the edge. Fog starts closer so the belt fades naturally.
+- Still fully instanced: trunks, round canopies, three cone tiers and bushes are six draw calls in total for 300+ trees on the high preset. Belt trees and out-of-bounds bushes are excluded from collision checks. Counts per preset: low 22+90 trees/20 bushes, medium 34+160/36, high 46+240/56. Frame rate unchanged in Chrome (≈30 fps on the Intel Iris Xe laptop).
