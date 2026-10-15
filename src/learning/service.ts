@@ -5,7 +5,7 @@ import { DEFAULT_LEARNER_MODEL_CONFIG, type LearnerModelConfig } from "./learner
 import { buildLearnerModel } from "./learnerModel";
 import { advanceRound, decideNext, startRound, type RoundState } from "./policy";
 import { DEFAULT_POLICY_CONFIG, type PolicyConfig } from "./policyConfig";
-import { buildPuzzles, puzzleStatus, starsForMistakes, type Puzzle, type Status } from "./puzzles";
+import { buildPuzzles, levelStatuses, puzzleStatus, starsForMistakes, type Puzzle, type Status } from "./puzzles";
 import { answer, buildQuestion, hintFor, startQuestion, type QuestionState } from "./question";
 import type { RandomSource } from "./random";
 import type { PresentationReason, StrategyReason } from "./reasons";
@@ -79,6 +79,14 @@ export type MasteryStatus =
   | { readonly available: true }
   | { readonly available: false; readonly reason: string };
 
+export interface LevelInfo {
+  readonly level: number;
+  readonly name?: string;
+  readonly status: Status;
+  readonly puzzleCount: number;
+  readonly completedCount: number;
+}
+
 export interface QuestInfo {
   readonly questId: string;
   readonly level: number;
@@ -108,6 +116,8 @@ export interface LearningService {
     readonly levels: number;
   };
   getQuestInfo(questId: string, completedQuestIds: readonly string[]): QuestInfo | null;
+  /** Unlock state and progress of one level (scene). */
+  getLevelInfo(level: number, completedQuestIds: readonly string[]): LevelInfo | null;
   /** Every puzzle in curriculum order (for level totals and maps). */
   listPuzzles(): readonly { readonly questId: string; readonly level: number; readonly number: number }[];
 }
@@ -356,6 +366,18 @@ export function createCurriculumLearningService(
     }),
 
     listPuzzles: () => allPuzzles.map((p) => ({ questId: p.id, level: p.level, number: p.number })),
+
+    getLevelInfo(level, completedQuestIds) {
+      const puzzles = puzzlesByLevel.get(level);
+      if (!puzzles) return null;
+      const completed = new Set(completedQuestIds);
+      return {
+        level,
+        status: levelStatuses(puzzlesByLevel, completed).get(level) ?? "locked",
+        puzzleCount: puzzles.length,
+        completedCount: puzzles.filter((p) => completed.has(p.id)).length,
+      };
+    },
 
     getQuestInfo(questId, completedQuestIds) {
       const puzzle = allPuzzles.find((p) => p.id === questId);

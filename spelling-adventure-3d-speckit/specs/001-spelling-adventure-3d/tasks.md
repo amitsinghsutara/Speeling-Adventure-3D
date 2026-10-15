@@ -156,3 +156,18 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 ### 2026-10-14 — Conifer forest
 - Trees are now mostly conifers (three stacked cone tiers per tree, upper tiers slightly lighter) with some round trees; sizes, lean and colour vary per instance. A dense belt of trees (inner radius 32 to 50) encloses the meadow beyond the playable edge, with the paths kept clear; low bushes cluster near trees and the edge. Fog starts closer so the belt fades naturally.
 - Still fully instanced: trunks, round canopies, three cone tiers and bushes are six draw calls in total for 300+ trees on the high preset. Belt trees and out-of-bounds bushes are excluded from collision checks. Counts per preset: low 22+90 trees/20 bushes, medium 34+160/36, high 46+240/56. Frame rate unchanged in Chrome (≈30 fps on the Intel Iris Xe laptop).
+
+### 2026-10-14 — Rhythmic wind and dense grass
+- Wind is now a travelling wave: the sway phase comes from each plant's position along a fixed wind direction (wavelength 14 m) with a small per-plant jitter, so gusts visibly roll across the meadow; the clock runs at 1.8× real time. Constants `WIND_SPEED`, `WIND_DIRECTION`, `WIND_WAVELENGTH` in `src/game/world/wind.ts`.
+- Dense grass: seeded tufts (three-sided cones, four triangles each) over the meadow and inner belt, off the paths, as one instanced draw call with strong tip sway. Counts per preset: low 1500, medium 3500, high 7000. 60 fps on the Intel Iris Xe laptop at high with everything on.
+- Diagnosis note: a tab that had been reloaded many times in one session dropped to 1.5 fps on every preset while a plain page ran at 61 fps and the main thread was idle; the same scene in a fresh tab ran at 60 fps. Treat long-lived dev tabs as suspect before blaming the scene.
+
+### 2026-10-14 — Lawn grass
+- Grass tufts halved in height (cone 0.26 high, radius 0.09, scale 0.65–1.15) with matching wind amplitude, and density roughly doubled: low 3500, medium 8000, high 16000. Measured on the Intel Iris Xe laptop in a fresh tab: medium 60 fps, high 30 fps (shadows + 16k tufts). The high preset is for capable desktops; `grassCount` in `src/game/graphics/quality.ts` is the dial.
+
+### 2026-10-15 — One scene per level, five signs, gates between scenes
+- The explorable area grew to radius 50 (belt to 68, hills further out) with a main path and four branches. Each scene holds the five signposts of one curriculum level (`sceneInteractables(level)`), an exit gate at the north end of the main path leading to the next level, and (from level 2) an entry gate behind the spawn leading back.
+- `src/game/world/scenes.ts`: a `SceneDefinition` per level (name, seed, palette). Four palettes cycle (Sunny Meadow, Autumn Woods, Snowy Pines, Bluebell Glade) with numbered names on later laps; the same generator builds every scene from its palette, so no new assets are needed.
+- Sign markers show state (grey locked, yellow available, green sphere done); gates show closed/open. The HUD badge reads `<scene> · done/5`. Interacting with a closed gate explains how many signs remain; an open gate shows a notice with **Go through**, which cancels any quest, resets input, shows the loading screen and rebuilds the canvas for the new level. Returning players start in the furthest unlocked level.
+- Grass is drawn in 36 chunks (12 sectors × 3 rings) so the camera frustum culls what it cannot see; counts scaled for the larger area (low 7000, medium 16000, high 30000). High preset measured at ~30 fps on the Intel Iris Xe laptop.
+- Verified in Chrome: fresh level 1 with five signs and the far gate; seeded progress started the game in Autumn Woods with ten stars; the entry gate prompted, offered **Go back?**, and travelled to Sunny Meadow showing 5/5.

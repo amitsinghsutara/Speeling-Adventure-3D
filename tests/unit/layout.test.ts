@@ -17,6 +17,7 @@ const OPTIONS = {
   treeCount: 40,
   forestTreeCount: 150,
   bushCount: 30,
+  grassCount: 800,
   flowerCount: 120,
   rockCount: 12,
   cloudCount: 8,
@@ -40,6 +41,7 @@ describe("generateMeadowLayout", () => {
     expect(layout.trees.filter((t) => !t.inForestBelt)).toHaveLength(OPTIONS.treeCount);
     expect(layout.trees.filter((t) => t.inForestBelt)).toHaveLength(OPTIONS.forestTreeCount);
     expect(layout.bushes).toHaveLength(OPTIONS.bushCount);
+    expect(layout.grass).toHaveLength(OPTIONS.grassCount);
     expect(layout.flowers).toHaveLength(OPTIONS.flowerCount);
     expect(layout.rocks).toHaveLength(OPTIONS.rockCount);
     expect(layout.clouds).toHaveLength(OPTIONS.cloudCount);
@@ -57,7 +59,7 @@ describe("generateMeadowLayout", () => {
 
   it("keeps meadow trees off the paths, apart from each other and away from spawn", () => {
     const layout = generateMeadowLayout(OPTIONS);
-    const paths = [layout.mainPath, layout.branchPath];
+    const paths = layout.paths;
     const meadowTrees = layout.trees.filter((t) => !t.inForestBelt);
     for (const tree of meadowTrees) {
       for (const path of paths) {
@@ -83,8 +85,9 @@ describe("generateMeadowLayout", () => {
       const r = Math.hypot(tree.position[0], tree.position[2]);
       expect(r).toBeGreaterThanOrEqual(FOREST_INNER_RADIUS - 0.01);
       expect(r).toBeLessThanOrEqual(FOREST_OUTER_RADIUS + 0.01);
-      expect(distanceToPolylineXZ(tree.position, layout.mainPath)).toBeGreaterThanOrEqual(PATH_CLEARANCE);
-      expect(distanceToPolylineXZ(tree.position, layout.branchPath)).toBeGreaterThanOrEqual(PATH_CLEARANCE);
+      for (const path of layout.paths) {
+        expect(distanceToPolylineXZ(tree.position, path)).toBeGreaterThanOrEqual(PATH_CLEARANCE);
+      }
     }
     for (let i = 0; i < belt.length; i += 1) {
       for (let j = i + 1; j < belt.length; j += 1) {
@@ -108,6 +111,13 @@ describe("generateMeadowLayout", () => {
     }
   });
 
+  it("keeps grass off the path surface", () => {
+    const layout = generateMeadowLayout(OPTIONS);
+    for (const tuft of layout.grass) {
+      for (const path of layout.paths) expect(distanceToPolylineXZ(tuft.position, path)).toBeGreaterThan(1.3);
+    }
+  });
+
   it("keeps flowers and rocks inside the meadow and off the path surface", () => {
     const layout = generateMeadowLayout(OPTIONS);
     for (const item of [...layout.flowers, ...layout.rocks]) {
@@ -121,6 +131,20 @@ describe("generateMeadowLayout", () => {
     expect(distanceToPolylineXZ(layout.fernSpawn, layout.mainPath)).toBeLessThan(1);
     expect(layout.cameraStart[2]).toBeGreaterThan(layout.fernSpawn[2]);
     expect(layout.cameraStart[1]).toBeGreaterThan(layout.fernSpawn[1]);
+  });
+
+  it("has five signs beside the paths and a gate at the end of the main path", () => {
+    const layout = generateMeadowLayout(OPTIONS);
+    const signs = layout.interactables.filter((i) => i.questId);
+    expect(signs).toHaveLength(5);
+    for (const sign of signs) {
+      const nearest = Math.min(...layout.paths.map((p) => distanceToPolylineXZ(sign.position, p)));
+      expect(nearest).toBeLessThan(4);
+      expect(Math.hypot(sign.position[0], sign.position[2])).toBeLessThan(MEADOW_RADIUS);
+    }
+    const gate = layout.interactables.find((i) => i.travelToLevel === 2);
+    expect(gate).toBeDefined();
+    expect(distanceToPolylineXZ(gate!.position, layout.mainPath)).toBeLessThan(4);
   });
 
   it("places hills beyond the explorable meadow", () => {

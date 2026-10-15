@@ -48,14 +48,15 @@ describe("buildColliders", () => {
       treeCount: 10,
       forestTreeCount: 0,
       bushCount: 0,
+      grassCount: 0,
       flowerCount: 5,
       rockCount: 3,
       cloudCount: 1,
     });
     const colliders = buildColliders(layout);
-    // 10 trunks + 2 signposts + 3 rocks
-    expect(colliders.walk).toHaveLength(15);
-    expect(layout.interactables).toHaveLength(2);
+    // 10 trunks + 5 signposts + 1 gate + 3 rocks
+    expect(colliders.walk).toHaveLength(19);
+    expect(layout.interactables).toHaveLength(6);
     expect(colliders.camera).toHaveLength(10);
     expect(colliders.walk[0]?.radius).toBe(TRUNK_COLLIDER_RADIUS);
     expect(colliders.camera[0]?.radius).toBe(layout.trees[0]?.canopyRadius);

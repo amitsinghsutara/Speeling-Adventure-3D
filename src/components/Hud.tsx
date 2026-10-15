@@ -15,6 +15,8 @@ export interface HudProps {
   offlinePhase?: string;
   /** Opens the grown-ups screen after a press-and-hold. */
   onOpenGrownUps?: () => void;
+  /** Current scene name and puzzle progress, e.g. "Sunny Meadow · 2/5". */
+  sceneLabel?: string | null;
 }
 
 const HINTS: Record<ControlMode, string> = {
@@ -31,6 +33,7 @@ export function Hud({
   offlineLabel = null,
   offlinePhase = "disabled",
   onOpenGrownUps,
+  sceneLabel = null,
 }: HudProps) {
   return (
     <div
@@ -40,7 +43,7 @@ export function Hud({
       data-offline={offlinePhase}
     >
       <div className="hud__top">
-        <div className="hud__badge">Spelling Adventure 3D</div>
+        <div className="hud__badge">{sceneLabel ?? "Spelling Adventure 3D"}</div>
         <div className="hud__top-right">
           {onOpenGrownUps ? (
             <HoldButton label="For grown-ups: press and hold to open" onComplete={onOpenGrownUps}>

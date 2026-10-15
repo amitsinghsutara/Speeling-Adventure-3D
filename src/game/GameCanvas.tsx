@@ -21,10 +21,14 @@ import type { WorldInteractable } from "./quest/interactables";
 import { attachKeyboard } from "./input/keyboard";
 import { PlayerRig } from "./PlayerRig";
 import { generateMeadowLayout } from "./world/layout";
-import { MeadowScene } from "./world/MeadowScene";
+import { MeadowScene, type InteractableStates } from "./world/MeadowScene";
 
 export interface GameCanvasProps {
   input: InputHub;
+  /** Which level's scene to build. Changing it rebuilds the world. */
+  level: number;
+  /** Puzzle and gate states by interactable id. */
+  interactableStates: InteractableStates;
   /** Interactable currently in range; drives the signpost affordance. */
   activeInteractableId: string | null;
   onProximity: (interactable: WorldInteractable | null) => void;
@@ -55,6 +59,8 @@ const FALLBACK_HINTS: DeviceHints = {
  */
 export function GameCanvas({
   input,
+  level,
+  interactableStates,
   activeInteractableId,
   onProximity,
   onInteract,
@@ -76,14 +82,16 @@ export function GameCanvas({
   const layout = useMemo(
     () =>
       generateMeadowLayout({
+        level,
         treeCount: quality.treeCount,
         forestTreeCount: quality.forestTreeCount,
         bushCount: quality.bushCount,
+        grassCount: quality.grassCount,
         flowerCount: quality.flowerCount,
         rockCount: quality.rockCount,
         cloudCount: quality.cloudCount,
       }),
-    [quality],
+    [quality, level],
   );
 
   useEffect(() => {
@@ -150,6 +158,7 @@ export function GameCanvas({
             quality={quality}
             reducedMotion={hints.reducedMotion}
             activeInteractableId={activeInteractableId}
+            interactableStates={interactableStates}
           />
           <PlayerRig
             layout={layout}

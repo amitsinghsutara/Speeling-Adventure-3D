@@ -3,11 +3,13 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import type * as THREE from "three";
 import { writeInstances } from "./instancing";
-import { CANOPY_COLORS, CONIFER_COLORS, type TreePlacement } from "./layout";
+import type { TreePlacement } from "./layout";
 import { getSharedMaterials } from "./materials";
 
 export interface TreesProps {
   trees: readonly TreePlacement[];
+  canopyColors: readonly string[];
+  coniferColors: readonly string[];
 }
 
 /** Conifer tiers from bottom to top: [y offset in trunk heights, radius factor, height factor]. */
@@ -23,7 +25,7 @@ const CONIFER_TIERS: ReadonlyArray<readonly [number, number, number]> = [
  * conifer. Per-instance colour gives the variety; wind sway comes from the
  * shared materials.
  */
-export function Trees({ trees }: TreesProps) {
+export function Trees({ trees, canopyColors, coniferColors }: TreesProps) {
   const trunks = useRef<THREE.InstancedMesh>(null);
   const canopies = useRef<THREE.InstancedMesh>(null);
   const tier0 = useRef<THREE.InstancedMesh>(null);
@@ -48,7 +50,7 @@ export function Trees({ trees }: TreesProps) {
         out.position.set(tree.position[0], tree.trunkHeight + tree.canopyRadius * 0.8, tree.position[2]);
         out.scale.set(tree.canopyRadius, tree.canopyRadius * 1.12, tree.canopyRadius);
         out.euler.set(tree.leanX, tree.rotationY, tree.leanZ);
-        out.color.set(CANOPY_COLORS[tree.colorIndex] ?? CANOPY_COLORS[0]);
+        out.color.set(canopyColors[tree.colorIndex] ?? canopyColors[0] ?? "#4fb848");
       });
     }
     [tier0, tier1, tier2].forEach((ref, tierIndex) => {
@@ -59,19 +61,14 @@ export function Trees({ trees }: TreesProps) {
       writeInstances(mesh, conifers, (tree, _i, out) => {
         const s = tree.canopyRadius;
         const height = heightFactor * s;
-        out.position.set(
-          tree.position[0],
-          tree.trunkHeight * 0.6 + yFactor * s + height / 2,
-          tree.position[2],
-        );
+        out.position.set(tree.position[0], tree.trunkHeight * 0.6 + yFactor * s + height / 2, tree.position[2]);
         out.scale.set(radiusFactor * s, height, radiusFactor * s);
         out.euler.set(tree.leanX, tree.rotationY, tree.leanZ);
-        // Upper tiers are a touch lighter, like new growth.
-        out.color.set(CONIFER_COLORS[tree.colorIndex] ?? CONIFER_COLORS[0]);
+        out.color.set(coniferColors[tree.colorIndex] ?? coniferColors[0] ?? "#2f7d3f");
         out.color.offsetHSL(0, 0, tierIndex * 0.035);
       });
     });
-  }, [trees, round, conifers]);
+  }, [trees, round, conifers, canopyColors, coniferColors]);
 
   return (
     <group>

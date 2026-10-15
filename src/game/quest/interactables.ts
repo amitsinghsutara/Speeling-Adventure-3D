@@ -8,6 +8,8 @@ export interface WorldInteractable {
   readonly position: Vec3;
   readonly interactionRadius: number;
   readonly questId?: string;
+  /** For gates: the level (scene) this leads to. */
+  readonly travelToLevel?: number;
 }
 
 /** Nearest interactable whose radius contains the position, or null. */

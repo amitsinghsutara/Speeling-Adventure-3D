@@ -14,6 +14,7 @@ export interface SharedMaterials {
   readonly canopy: THREE.MeshLambertMaterial;
   readonly conifer: THREE.MeshLambertMaterial;
   readonly bush: THREE.MeshLambertMaterial;
+  readonly grass: THREE.MeshLambertMaterial;
   readonly rock: THREE.MeshLambertMaterial;
   readonly flower: THREE.MeshLambertMaterial;
   readonly stem: THREE.MeshLambertMaterial;
@@ -22,6 +23,8 @@ export interface SharedMaterials {
   readonly signBoard: THREE.MeshLambertMaterial;
   readonly marker: THREE.MeshBasicMaterial;
   readonly markerActive: THREE.MeshBasicMaterial;
+  readonly markerDone: THREE.MeshBasicMaterial;
+  readonly markerLocked: THREE.MeshBasicMaterial;
   readonly foxOrange: THREE.MeshLambertMaterial;
   readonly foxCream: THREE.MeshLambertMaterial;
   readonly foxDark: THREE.MeshLambertMaterial;
@@ -51,6 +54,7 @@ export function getSharedMaterials(): SharedMaterials {
     }),
     conifer: new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }),
     bush: new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }),
+    grass: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
     rock: new THREE.MeshLambertMaterial({ color: "#9aa3ad", flatShading: true }),
     flower: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
     stem: new THREE.MeshLambertMaterial({ color: "#3f9c3a" }),
@@ -59,6 +63,8 @@ export function getSharedMaterials(): SharedMaterials {
     signBoard: new THREE.MeshLambertMaterial({ color: "#c9893f", flatShading: true }),
     marker: new THREE.MeshBasicMaterial({ color: "#fff1a8" }),
     markerActive: new THREE.MeshBasicMaterial({ color: "#ffd23f" }),
+    markerDone: new THREE.MeshBasicMaterial({ color: "#5fd36c" }),
+    markerLocked: new THREE.MeshBasicMaterial({ color: "#9aa3ad" }),
     foxOrange: new THREE.MeshLambertMaterial({ color: "#f28c28" }),
     foxCream: new THREE.MeshLambertMaterial({ color: "#fff1d6" }),
     foxDark: new THREE.MeshLambertMaterial({ color: "#3b2a24" }),
@@ -70,6 +76,8 @@ export function getSharedMaterials(): SharedMaterials {
   // Cone tier: unit cone, height 1 centred at 0.
   applyWind(cache.conifer, wind, { baseY: -0.5, spanY: 1, amplitude: 0.08 });
   applyWind(cache.bush, wind, { baseY: -0.6, spanY: 1.2, amplitude: 0.04 });
+  // Grass tuft: cone of height 0.26 centred at 0; tips bend a lot.
+  applyWind(cache.grass, wind, { baseY: -0.13, spanY: 0.26, amplitude: 0.09 });
   applyWind(cache.flower, wind, { baseY: -0.15, spanY: 0.3, amplitude: 0.08 });
   applyWind(cache.stem, wind, { baseY: -0.16, spanY: 0.32, amplitude: 0.08 });
   return cache;

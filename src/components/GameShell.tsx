@@ -15,10 +15,15 @@ import {
   type ControlMode,
 } from "@/game/input/controlMode";
 import { createInputHub } from "@/game/input/inputHub";
-import { starsByQuest } from "@/game/quest/rewards";
+import type { WorldInteractable } from "@/game/quest/interactables";
 import { INITIAL_QUEST_STATE, type QuestState } from "@/game/quest/questController";
+import { starsByQuest } from "@/game/quest/rewards";
+import { sceneInteractables } from "@/game/world/layout";
+import type { InteractableStates } from "@/game/world/MeadowScene";
+import { MAX_LEVEL, sceneForLevel } from "@/game/world/scenes";
 import { loadCurriculum } from "@/learning/loadCurriculum";
-import { createCurriculumLearningService } from "@/learning/service";
+import { createCurriculumLearningService, type LearningService } from "@/learning/service";
+import { offlineLabel } from "@/offline/serviceWorkerClient";
 import {
   createDefaultRepository,
   createProgressPersistence,
@@ -30,12 +35,12 @@ import {
   questStateFromProgress,
 } from "@/persistence/progressMapping";
 import type { RestoredState } from "@/persistence/progressPersistence";
-import { offlineLabel } from "@/offline/serviceWorkerClient";
 import { ChallengeDialog } from "./ChallengeDialog";
 import { GameErrorBoundary } from "./GameErrorBoundary";
 import { GrownUpsScreen, type LevelStars } from "./GrownUpsScreen";
 import { Hud } from "./Hud";
 import { LoadingScreen } from "./LoadingScreen";
+import { NoticeDialog } from "./NoticeDialog";
 import { RenderErrorScreen } from "./RenderErrorScreen";
 import { TouchControls } from "./TouchControls";
 import { useOfflineStatus } from "./useOfflineStatus";
@@ -55,9 +60,16 @@ type ShellStatus =
   | { kind: "ready" }
   | { kind: "error"; error: unknown };
 
-const PROMPTS: Record<ControlMode, string> = {
-  keyboard: "Press E to read the sign",
-  touch: "Tap ! to read the sign",
+interface Notice {
+  readonly icon: string;
+  readonly title: string;
+  readonly message: string;
+  readonly travelTo?: number;
+}
+
+const PROMPTS: Record<ControlMode, { sign: string; gate: string }> = {
+  keyboard: { sign: "Press E to read the sign", gate: "Press E to open the gate" },
+  touch: { sign: "Tap ! to read the sign", gate: "Tap ! to open the gate" },
 };
 
 export interface GameShellProps {
@@ -70,10 +82,41 @@ function wantsProgressReset(): boolean {
   return new URLSearchParams(window.location.search).get("reset") === "progress";
 }
 
+/** The scene a returning player starts in: the furthest unlocked level. */
+export function startLevelFor(learning: LearningService, completedQuestIds: readonly string[]): number {
+  let level = 1;
+  for (let candidate = 1; candidate <= MAX_LEVEL; candidate += 1) {
+    const info = learning.getLevelInfo(candidate, completedQuestIds);
+    if (!info || info.status === "locked") break;
+    level = candidate;
+  }
+  return level;
+}
+
+/** Sign and gate states for a level's interactables, from the learning layer. */
+export function interactableStatesFor(
+  learning: LearningService,
+  level: number,
+  completedQuestIds: readonly string[],
+): InteractableStates {
+  const states: Record<string, InteractableStates[string]> = {};
+  for (const item of sceneInteractables(level)) {
+    if (item.questId) {
+      states[item.id] = learning.getQuestInfo(item.questId, completedQuestIds)?.status ?? "locked";
+    } else if (item.travelToLevel !== undefined) {
+      const info = learning.getLevelInfo(item.travelToLevel, completedQuestIds);
+      states[item.id] = info && info.status !== "locked" ? "open" : "locked";
+    }
+  }
+  return states;
+}
+
 export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   const [status, setStatus] = useState<ShellStatus>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [grownUpsOpen, setGrownUpsOpen] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [level, setLevel] = useState<number | null>(null);
   const input = useMemo(() => createInputHub(), []);
   // Only consumed by client-only children rendered after the scene is ready.
   const controlMode = useMemo<ControlMode>(
@@ -96,12 +139,35 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     persistence.getStatus,
   );
   const [restored, setRestored] = useState<RestoredState | null>(null);
+
+  // ---- Learning + quest --------------------------------------------------
+  // Imported curriculum (src/learning/content/PROVENANCE.md). The service is
+  // built once stored events are known so the learner model has its history;
+  // new events and decisions stream to persistence.
+  const learning = useMemo(
+    () =>
+      createCurriculumLearningService(loadCurriculum(), {
+        history: restored?.events ?? [],
+        sink: (event) => persistence.recordLearningEvent(event),
+        decisionSink: (decision) => persistence.recordDecision(decision),
+      }),
+    [persistence, restored],
+  );
+  const initialQuestState = useMemo<QuestState>(
+    () => (restored ? questStateFromProgress(restored.progress) : INITIAL_QUEST_STATE),
+    [restored],
+  );
+  const quest = useQuest(learning, initialQuestState);
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       if (wantsProgressReset()) await repository.clearAll();
       const result = await persistence.restore();
-      if (!cancelled) setRestored(result);
+      if (cancelled) return;
+      setRestored(result);
+      const completed = result.progress?.completedQuestIds ?? [];
+      setLevel(startLevelFor(createCurriculumLearningService(loadCurriculum()), completed));
     };
     void run();
     return () => {
@@ -123,29 +189,11 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     };
   }, [persistence]);
 
-  // ---- Learning + quest --------------------------------------------------
-  // Imported curriculum (src/learning/content/PROVENANCE.md). The service is
-  // built once stored events are known so the learner model has its history;
-  // new events and decisions stream to persistence.
-  const learning = useMemo(
-    () =>
-      createCurriculumLearningService(loadCurriculum(), {
-        history: restored?.events ?? [],
-        sink: (event) => persistence.recordLearningEvent(event),
-        decisionSink: (decision) => persistence.recordDecision(decision),
-      }),
-    [persistence, restored],
-  );
-  const initialQuestState = useMemo<QuestState>(
-    () => (restored ? questStateFromProgress(restored.progress) : INITIAL_QUEST_STATE),
-    [restored],
-  );
-  const quest = useQuest(learning, initialQuestState);
   const dialogOpen =
     quest.state.phase === "active" ||
     quest.state.phase === "completed" ||
     quest.state.phase === "error";
-  const overlayOpen = dialogOpen || grownUpsOpen;
+  const overlayOpen = dialogOpen || grownUpsOpen || notice !== null;
 
   // Persist meaningful changes only (completed quests and rewards).
   const lastSeenQuestState = useRef<QuestState | null>(null);
@@ -161,6 +209,66 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   useEffect(() => {
     input.setSuspended(overlayOpen);
   }, [input, overlayOpen]);
+
+  // ---- Scene + travel ----------------------------------------------------
+  const currentLevel = level ?? 1;
+  const completedQuestIds = quest.state.completedQuestIds;
+  const interactableStates = useMemo(
+    () => interactableStatesFor(learning, currentLevel, completedQuestIds),
+    [learning, currentLevel, completedQuestIds],
+  );
+  const levelInfo = learning.getLevelInfo(currentLevel, completedQuestIds);
+  const sceneLabel = levelInfo
+    ? `${sceneForLevel(currentLevel).name} · ${levelInfo.completedCount}/${levelInfo.puzzleCount}`
+    : sceneForLevel(currentLevel).name;
+
+  const travelTo = useCallback(
+    (target: number) => {
+      setNotice(null);
+      quest.controller.cancel();
+      input.reset();
+      setStatus({ kind: "loading" });
+      setLevel(target);
+    },
+    [quest.controller, input],
+  );
+
+  const handleInteract = useCallback(
+    (interactable: WorldInteractable) => {
+      if (interactable.travelToLevel === undefined) {
+        quest.interact();
+        return;
+      }
+      const target = interactable.travelToLevel;
+      const targetScene = sceneForLevel(target);
+      const info = learning.getLevelInfo(target, quest.state.completedQuestIds);
+      if (!info) {
+        setNotice({ icon: "🌲", title: "The path ends here", message: "There is nothing beyond this gate yet." });
+        return;
+      }
+      if (info.status === "locked") {
+        const here = learning.getLevelInfo(currentLevel, quest.state.completedQuestIds);
+        const done = here?.completedCount ?? 0;
+        const total = here?.puzzleCount ?? 5;
+        setNotice({
+          icon: "🔒",
+          title: "The gate is closed",
+          message: `Finish all the signs in this meadow to open it. You have done ${done} of ${total}.`,
+        });
+        return;
+      }
+      setNotice({
+        icon: target > currentLevel ? "🌟" : "🏡",
+        title: target > currentLevel ? "The gate is open!" : "Go back?",
+        message:
+          target > currentLevel
+            ? `Through here is ${targetScene.name}, with new words to spell.`
+            : `This leads back to ${targetScene.name}.`,
+        travelTo: target,
+      });
+    },
+    [quest, learning, currentLevel],
+  );
 
   // ---- Grown-ups screen -------------------------------------------------
   const openGrownUps = useCallback(() => setGrownUpsOpen(true), []);
@@ -189,6 +297,8 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
       const result = await persistence.restore();
       setRestored(result);
       setGrownUpsOpen(false);
+      setStatus({ kind: "loading" });
+      setLevel(1);
     };
     void run();
   }, [quest.controller, repository, persistence]);
@@ -207,7 +317,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     setAttempt((n) => n + 1);
   }, [input]);
 
-  const { setProximity, interact, controller } = quest;
+  const { setProximity, controller } = quest;
   const submitAnswer = useCallback(
     (answer: string) => {
       controller.submitAnswer(answer);
@@ -218,9 +328,14 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   const cancelQuest = useCallback(() => controller.cancel(), [controller]);
   const dismissQuest = useCallback(() => controller.dismiss(), [controller]);
 
+  const nearby = quest.state.nearbyInteractable;
   const prompt =
-    quest.state.phase === "available" && quest.state.nearbyInteractable?.questId
-      ? PROMPTS[controlMode]
+    quest.state.phase === "available" && nearby
+      ? nearby.travelToLevel !== undefined
+        ? PROMPTS[controlMode].gate
+        : nearby.questId
+          ? PROMPTS[controlMode].sign
+          : null
       : null;
 
   const persistenceNote = !persistenceStatus.persistent
@@ -229,9 +344,10 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
       ? "Saving your progress… (will keep trying)"
       : null;
 
-  const ready = status.kind === "ready" && restored !== null;
+  const ready = status.kind === "ready" && restored !== null && level !== null;
   // Offline preparation starts once the scene has loaded all its assets.
   const offline = useOfflineStatus(ready);
+  const noticeTravel = notice?.travelTo;
 
   return (
     <div
@@ -239,21 +355,26 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
       data-status={status.kind}
       data-quest={quest.state.phase}
       data-restored={restored ? "true" : "false"}
+      data-level={level ?? ""}
     >
-      {status.kind !== "error" ? (
-        <GameErrorBoundary key={attempt} onError={handleError}>
+      {status.kind !== "error" && level !== null ? (
+        <GameErrorBoundary key={`${attempt}:${level}`} onError={handleError}>
           <GameCanvas
             input={input}
-            activeInteractableId={quest.state.nearbyInteractable?.id ?? null}
+            level={level}
+            interactableStates={interactableStates}
+            activeInteractableId={nearby?.id ?? null}
             onProximity={setProximity}
-            onInteract={interact}
+            onInteract={handleInteract}
             onReady={handleReady}
             onError={handleError}
           />
         </GameErrorBoundary>
       ) : null}
       {status.kind !== "error" && !ready ? (
-        <LoadingScreen message="Waking up the meadow…" />
+        <LoadingScreen
+          message={level !== null ? `Walking to ${sceneForLevel(level).name}…` : "Waking up the meadow…"}
+        />
       ) : null}
       {ready ? (
         <>
@@ -266,7 +387,29 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
             offlineLabel={offlineLabel(offline)}
             offlinePhase={offline.phase}
             onOpenGrownUps={openGrownUps}
+            sceneLabel={sceneLabel}
           />
+          {controlMode === "touch" && !overlayOpen ? <TouchControls input={input} /> : null}
+          {dialogOpen ? (
+            <ChallengeDialog
+              quest={quest.state}
+              onSubmit={submitAnswer}
+              onAdvance={advanceQuest}
+              onCancel={cancelQuest}
+              onDismiss={dismissQuest}
+            />
+          ) : null}
+          {notice ? (
+            <NoticeDialog
+              icon={notice.icon}
+              title={notice.title}
+              message={notice.message}
+              {...(noticeTravel !== undefined
+                ? { actionLabel: "Go through", onAction: () => travelTo(noticeTravel) }
+                : {})}
+              onClose={() => setNotice(null)}
+            />
+          ) : null}
           {grownUpsOpen && report ? (
             <GrownUpsScreen
               report={report}
@@ -282,16 +425,6 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
               }}
               onBack={closeGrownUps}
               onReset={resetProgress}
-            />
-          ) : null}
-          {controlMode === "touch" && !overlayOpen ? <TouchControls input={input} /> : null}
-          {dialogOpen ? (
-            <ChallengeDialog
-              quest={quest.state}
-              onSubmit={submitAnswer}
-              onAdvance={advanceQuest}
-              onCancel={cancelQuest}
-              onDismiss={dismissQuest}
             />
           ) : null}
         </>

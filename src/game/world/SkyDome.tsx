@@ -57,6 +57,11 @@ export function SkyDome({
     [topColor, horizonColor],
   );
 
+  useEffect(() => {
+    material.uniforms.topColor?.value.set(topColor);
+    material.uniforms.horizonColor?.value.set(horizonColor);
+  }, [material, topColor, horizonColor]);
+
   useEffect(() => () => material.dispose(), [material]);
 
   return (

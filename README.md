@@ -63,8 +63,9 @@ Milestone 2 ("3D meadow with placeholder geometry") is implemented:
 
 - Client-only scene; the server never initialises WebGL.
 - Gradient sky, drifting clouds, rolling hills, ground, main path plus one
-  branch, a dense instanced conifer forest with bushes, rocks and flowers, warm directional lighting, and
-  GPU wind sway on trees and flowers (off under reduced motion).
+  branch, a dense instanced conifer forest with bushes, thousands of grass tufts, rocks
+  and flowers, warm directional lighting, and a GPU wind wave that rolls across
+  trees, bushes and grass (off under reduced motion).
 - Placeholder Fern (primitives) with an idle bob; the controller seam is
   `CharacterVisualProps` in `src/game/character/types.ts`.
 - Loading screen, friendly recoverable error screen, WebGL context-loss
@@ -123,6 +124,8 @@ sibling project `D:Speeling Game 3` with hashes and update steps recorded in
 `src/learning/content/PROVENANCE.md`: 10 levels, 200 target words, each with
 three approved foils from a foil codebook, plus a bundled MP3 per word.
 
+- Each curriculum level is its own scene with five signposts and a gate to
+  the next level that opens when all five puzzles are done (and a gate back).
 - A sign starts one puzzle (five words in curriculum order). The child hears
   the word and picks it among four tiles; wrong tiles are disabled with a
   hint, and the puzzle awards 1 to 3 stars by mistakes. Puzzles unlock in order.

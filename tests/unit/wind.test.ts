@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceWind, applyWind, createWindUniforms, windShaderPatch } from "@/game/world/wind";
+import { WIND_SPEED, advanceWind, applyWind, createWindUniforms, windShaderPatch } from "@/game/world/wind";
 
 const PARAMS = { baseY: -0.5, spanY: 1, amplitude: 0.05 };
 const SHADER = "void main() {\n#include <begin_vertex>\n#include <project_vertex>\n}";
@@ -9,10 +9,13 @@ describe("windShaderPatch", () => {
     const patched = windShaderPatch(SHADER, PARAMS);
     expect(patched.startsWith("uniform float uWindTime;\nuniform float uWindStrength;\n")).toBe(true);
     expect(patched).toContain("#include <begin_vertex>");
-    expect(patched).toContain("transformed.x += windSway * windHeight;");
+    expect(patched).toContain("transformed.x += windSway * windHeight * 0.8000;");
     expect(patched).toContain("(position.y - -0.5000) / 1.0000");
     expect(patched).toContain("* 0.0500 * windGust * uWindStrength");
     expect(patched).toContain("#ifdef USE_INSTANCING");
+    // The wave travels along the wind direction rather than using a random phase.
+    expect(patched).toContain("windAlong");
+    expect(patched).toContain("transformed.z += windSway * windHeight * 0.6000;");
     expect(patched.indexOf("windSway")).toBeGreaterThan(patched.indexOf("#include <begin_vertex>"));
     expect(patched.indexOf("windSway")).toBeLessThan(patched.indexOf("#include <project_vertex>"));
   });
@@ -27,10 +30,10 @@ describe("wind clock", () => {
     const uniforms = createWindUniforms();
     advanceWind(uniforms, 0.016, false);
     advanceWind(uniforms, 0.016, false);
-    expect(uniforms.uWindTime.value).toBeCloseTo(0.032);
+    expect(uniforms.uWindTime.value).toBeCloseTo(0.032 * WIND_SPEED);
     expect(uniforms.uWindStrength.value).toBe(1);
     advanceWind(uniforms, 1, true);
-    expect(uniforms.uWindTime.value).toBeCloseTo(0.032);
+    expect(uniforms.uWindTime.value).toBeCloseTo(0.032 * WIND_SPEED);
     expect(uniforms.uWindStrength.value).toBe(0);
   });
 });

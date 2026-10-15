@@ -10,6 +10,7 @@ export interface QualitySettings {
   readonly treeCount: number;
   readonly forestTreeCount: number;
   readonly bushCount: number;
+  readonly grassCount: number;
   readonly flowerCount: number;
   readonly rockCount: number;
   readonly cloudCount: number;
@@ -27,11 +28,12 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: false,
     shadowMapSize: 0,
     antialias: false,
-    treeCount: 22,
-    forestTreeCount: 90,
-    bushCount: 20,
-    flowerCount: 50,
-    rockCount: 8,
+    treeCount: 40,
+    forestTreeCount: 140,
+    bushCount: 32,
+    grassCount: 7000,
+    flowerCount: 80,
+    rockCount: 12,
     cloudCount: 5,
   },
   medium: {
@@ -40,11 +42,12 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: false,
     shadowMapSize: 0,
     antialias: true,
-    treeCount: 34,
-    forestTreeCount: 160,
-    bushCount: 36,
-    flowerCount: 100,
-    rockCount: 12,
+    treeCount: 60,
+    forestTreeCount: 240,
+    bushCount: 56,
+    grassCount: 16000,
+    flowerCount: 160,
+    rockCount: 18,
     cloudCount: 7,
   },
   high: {
@@ -53,11 +56,12 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
     shadows: true,
     shadowMapSize: 1024,
     antialias: true,
-    treeCount: 46,
-    forestTreeCount: 240,
-    bushCount: 56,
-    flowerCount: 160,
-    rockCount: 14,
+    treeCount: 80,
+    forestTreeCount: 340,
+    bushCount: 90,
+    grassCount: 30000,
+    flowerCount: 260,
+    rockCount: 22,
     cloudCount: 9,
   },
 };

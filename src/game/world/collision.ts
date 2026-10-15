@@ -21,6 +21,7 @@ export const PLAYABLE_RADIUS = MEADOW_RADIUS - 1;
 export function buildColliders(layout: MeadowLayout): WorldColliders {
   const walk: CircleCollider[] = [];
   const camera: CircleCollider[] = [];
+  // Gates and signs collide via their interactable entries below.
   for (const tree of layout.trees) {
     // Belt trees sit outside the playable circle; skip them to keep per-frame checks small.
     if (tree.inForestBelt && Math.hypot(tree.position[0], tree.position[2]) > PLAYABLE_RADIUS + 1) continue;
