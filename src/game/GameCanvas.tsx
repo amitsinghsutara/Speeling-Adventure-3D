@@ -1,19 +1,22 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { createPerfMonitor } from "./graphics/perfMonitor";
+import { getPerfStats } from "./graphics/perfStats";
 import {
   Suspense,
   useEffect,
   useMemo,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { RendererError } from "./graphics/errors";
 import {
   QUALITY_PRESETS,
   readDeviceHints,
-  resolveQualityLevel,
   type DeviceHints,
+  type QualityLevel,
 } from "./graphics/quality";
 import { describeWebGLSupport } from "./graphics/webgl";
 import type { InputHub } from "./input/inputHub";
@@ -25,6 +28,10 @@ import { MeadowScene, type InteractableStates } from "./world/MeadowScene";
 
 export interface GameCanvasProps {
   input: InputHub;
+  /** Preset chosen by the shell (preference, URL override, heuristic, safety net). */
+  qualityLevel: QualityLevel;
+  /** Sustained low frame rate detected; the shell may drop a preset. */
+  onSuggestDowngrade?: () => void;
   /** Which level's scene to build. Changing it rebuilds the world. */
   level: number;
   /** Puzzle and gate states by interactable id. */
@@ -59,6 +66,8 @@ const FALLBACK_HINTS: DeviceHints = {
  */
 export function GameCanvas({
   input,
+  qualityLevel,
+  onSuggestDowngrade,
   level,
   interactableStates,
   activeInteractableId,
@@ -72,13 +81,17 @@ export function GameCanvas({
     () => (typeof window === "undefined" ? FALLBACK_HINTS : readDeviceHints(window)),
     [],
   );
-  const quality = useMemo(() => {
-    const override =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("quality");
-    return QUALITY_PRESETS[resolveQualityLevel(hints, override)];
-  }, [hints]);
+  const quality = QUALITY_PRESETS[qualityLevel];
+  // Pause rendering while the tab is hidden; the loop resumes on return.
+  const [hidden, setHidden] = useState(
+    typeof document !== "undefined" && document.visibilityState === "hidden",
+  );
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => setHidden(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
   const layout = useMemo(
     () =>
       generateMeadowLayout({
@@ -136,7 +149,7 @@ export function GameCanvas({
         flat
         dpr={[1, quality.maxPixelRatio]}
         shadows={quality.shadows ? "percentage" : false}
-        frameloop="always"
+        frameloop={hidden ? "never" : "always"}
         gl={{
           antialias: quality.antialias,
           powerPreference: "high-performance",
@@ -151,7 +164,9 @@ export function GameCanvas({
         }}
       >
         <RendererWatchdog onError={onError} />
-        <FirstFrameSignal onReady={onReady} />
+        {/* Fires once per scene/preset so the shell can show loading and then ready. */}
+        <FirstFrameSignal key={`${level}:${qualityLevel}`} onReady={onReady} />
+        <PerfProbe onSuggestDowngrade={onSuggestDowngrade} />
         <Suspense fallback={null}>
           <MeadowScene
             layout={layout}
@@ -161,6 +176,7 @@ export function GameCanvas({
             interactableStates={interactableStates}
           />
           <PlayerRig
+            key={level}
             layout={layout}
             input={input}
             reducedMotion={hints.reducedMotion}
@@ -187,8 +203,25 @@ function RendererWatchdog({ onError }: { onError: (error: unknown) => void }) {
       );
     };
     element.addEventListener("webglcontextlost", handleLost);
+    // Note: never force context loss here. React's development strict mode
+    // runs effects twice, and a forced loss on the fake unmount kills the
+    // live renderer. R3F disposes the renderer on a real unmount.
     return () => element.removeEventListener("webglcontextlost", handleLost);
   }, [gl, onError]);
+  return null;
+}
+
+function PerfProbe({ onSuggestDowngrade }: { onSuggestDowngrade: (() => void) | undefined }) {
+  const gl = useThree((state) => state.gl);
+  const monitor = useMemo(() => createPerfMonitor(), []);
+  useFrame((_state, delta) => {
+    const sample = monitor.sample(delta);
+    const stats = getPerfStats();
+    stats.averageFps = sample.averageFps;
+    stats.drawCalls = gl.info.render.calls;
+    stats.triangles = gl.info.render.triangles;
+    if (sample.suggestDowngrade) onSuggestDowngrade?.();
+  });
   return null;
 }
 

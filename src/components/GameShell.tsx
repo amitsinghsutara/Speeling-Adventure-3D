@@ -15,6 +15,22 @@ import {
   type ControlMode,
 } from "@/game/input/controlMode";
 import { createInputHub } from "@/game/input/inputHub";
+import { lowerQuality } from "@/game/graphics/perfMonitor";
+import {
+  QUALITY_PRESETS,
+  detectDefaultQuality,
+  readDeviceHints,
+  type QualityLevel,
+} from "@/game/graphics/quality";
+import {
+  effectiveQuality,
+  readAutoFloor,
+  readQualityPreference,
+  writeAutoFloor,
+  writeQualityPreference,
+  type QualityPreference,
+} from "@/game/graphics/qualityPreference";
+import { getPerfStats } from "@/game/graphics/perfStats";
 import type { WorldInteractable } from "@/game/quest/interactables";
 import { INITIAL_QUEST_STATE, type QuestState } from "@/game/quest/questController";
 import { starsByQuest } from "@/game/quest/rewards";
@@ -24,6 +40,7 @@ import { MAX_LEVEL, sceneForLevel } from "@/game/world/scenes";
 import { loadCurriculum } from "@/learning/loadCurriculum";
 import { createCurriculumLearningService, type LearningService } from "@/learning/service";
 import { offlineLabel } from "@/offline/serviceWorkerClient";
+import { describeContainer, detectExitBridge } from "@/platform/containerBridge";
 import {
   createDefaultRepository,
   createProgressPersistence,
@@ -65,6 +82,8 @@ interface Notice {
   readonly title: string;
   readonly message: string;
   readonly travelTo?: number;
+  /** "Leave the forest?" for the container exit button. */
+  readonly exit?: boolean;
 }
 
 const PROMPTS: Record<ControlMode, { sign: string; gate: string }> = {
@@ -118,6 +137,40 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const input = useMemo(() => createInputHub(), []);
+  // Native container (Android WebView) bridge: capability-detected, hidden in browsers.
+  const exitBridge = useMemo(() => detectExitBridge(), []);
+  const container = useMemo(() => describeContainer(), []);
+
+  // ---- Graphics quality ---------------------------------------------------
+  const storage = typeof window === "undefined" ? null : window.localStorage;
+  const [qualityPreference, setQualityPreference] = useState<QualityPreference>(() =>
+    readQualityPreference(storage),
+  );
+  const [autoFloor, setAutoFloor] = useState<QualityLevel | null>(() => readAutoFloor(storage));
+  const heuristicQuality = useMemo<QualityLevel>(
+    () => (typeof window === "undefined" ? "medium" : detectDefaultQuality(readDeviceHints(window))),
+    [],
+  );
+  const urlQuality =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("quality");
+  const qualityLevel = effectiveQuality({
+    urlOverride: urlQuality,
+    preference: qualityPreference,
+    heuristic: heuristicQuality,
+    autoFloor,
+  });
+  const [qualityNote, setQualityNote] = useState<string | null>(null);
+  const changeQualityPreference = useCallback(
+    (value: QualityPreference) => {
+      setQualityPreference(value);
+      writeQualityPreference(storage, value);
+      if (value === "auto") {
+        setAutoFloor(null);
+        writeAutoFloor(storage, null);
+      }
+    },
+    [storage],
+  );
   // Only consumed by client-only children rendered after the scene is ready.
   const controlMode = useMemo<ControlMode>(
     () =>
@@ -194,6 +247,23 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     quest.state.phase === "completed" ||
     quest.state.phase === "error";
   const overlayOpen = dialogOpen || grownUpsOpen || notice !== null;
+
+  // Safety net: after sustained low frame rate, step the preset down once
+  // (only in auto mode, never mid-puzzle) and remember the floor.
+  const suggestDowngrade = useCallback(() => {
+    if (qualityPreference !== "auto" || urlQuality || overlayOpen) return;
+    const lower = lowerQuality(qualityLevel);
+    if (!lower) return;
+    setAutoFloor(lower);
+    writeAutoFloor(storage, lower);
+    setQualityNote(`Switched to ${QUALITY_PRESETS[lower].level} graphics to keep things smooth`);
+    setStatus({ kind: "loading" });
+  }, [qualityPreference, urlQuality, qualityLevel, storage, overlayOpen]);
+  useEffect(() => {
+    if (!qualityNote) return;
+    const timer = setTimeout(() => setQualityNote(null), 6000);
+    return () => clearTimeout(timer);
+  }, [qualityNote]);
 
   // Persist meaningful changes only (completed quests and rewards).
   const lastSeenQuestState = useRef<QuestState | null>(null);
@@ -342,12 +412,28 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     ? "Progress is kept only until you close this page"
     : persistenceStatus.lastSave === "failed" || persistenceStatus.pendingEvents > 0
       ? "Saving your progress… (will keep trying)"
-      : null;
+      : qualityNote;
 
   const ready = status.kind === "ready" && restored !== null && level !== null;
   // Offline preparation starts once the scene has loaded all its assets.
-  const offline = useOfflineStatus(ready);
+  const { status: offline, controller: offlineController } = useOfflineStatus(ready);
   const noticeTravel = notice?.travelTo;
+  const askToExit = useCallback(() => {
+    setNotice({
+      icon: "🚪",
+      title: "Leave the forest?",
+      message: dialogOpen
+        ? "Your stars are saved. This puzzle will start again next time. Come back soon!"
+        : "Your stars are saved. Come back soon!",
+      exit: true,
+    });
+  }, [dialogOpen]);
+  const confirmExit = useCallback(() => {
+    setNotice(null);
+    exitBridge.exit();
+  }, [exitBridge]);
+  // Offer a waiting update only when it cannot interrupt play.
+  const updateBanner = offline.updateReady && !overlayOpen;
 
   return (
     <div
@@ -358,9 +444,11 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
       data-level={level ?? ""}
     >
       {status.kind !== "error" && level !== null ? (
-        <GameErrorBoundary key={`${attempt}:${level}`} onError={handleError}>
+        <GameErrorBoundary key={attempt} onError={handleError}>
           <GameCanvas
             input={input}
+            qualityLevel={qualityLevel}
+            onSuggestDowngrade={suggestDowngrade}
             level={level}
             interactableStates={interactableStates}
             activeInteractableId={nearby?.id ?? null}
@@ -388,6 +476,9 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
             offlinePhase={offline.phase}
             onOpenGrownUps={openGrownUps}
             sceneLabel={sceneLabel}
+            onExit={exitBridge.canExit ? askToExit : undefined}
+            updateReady={updateBanner}
+            onUpdateNow={() => offlineController.applyUpdate()}
           />
           {controlMode === "touch" && !overlayOpen ? <TouchControls input={input} /> : null}
           {dialogOpen ? (
@@ -406,7 +497,9 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
               message={notice.message}
               {...(noticeTravel !== undefined
                 ? { actionLabel: "Go through", onAction: () => travelTo(noticeTravel) }
-                : {})}
+                : notice.exit
+                  ? { actionLabel: "Yes, leave", onAction: confirmExit, risky: true }
+                  : {})}
               onClose={() => setNotice(null)}
             />
           ) : null}
@@ -422,6 +515,20 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
                 persistent: persistenceStatus.persistent,
                 offlinePhase: offline.phase,
                 storedEvents: learning.getEvents().length,
+              }}
+              container={container}
+              updates={{
+                buildId: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
+                offline,
+                onCheck: () => void offlineController.checkForUpdates(),
+                onApply: () => offlineController.applyUpdate(),
+              }}
+              graphics={{
+                preference: qualityPreference,
+                effective: qualityLevel,
+                urlOverride: urlQuality !== null,
+                stats: { ...getPerfStats() },
+                onChange: changeQualityPreference,
               }}
               onBack={closeGrownUps}
               onReset={resetProgress}

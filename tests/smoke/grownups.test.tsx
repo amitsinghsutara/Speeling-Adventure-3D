@@ -122,6 +122,25 @@ describe("GrownUpsScreen", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
+  it("offers graphics presets and reports what is running", () => {
+    const onChange = vi.fn();
+    render(
+      <GrownUpsScreen
+        report={reportFor([])}
+        stars={[]}
+        facts={facts}
+        graphics={{ preference: "auto", effective: "medium", urlOverride: false, stats: { averageFps: 29.6, drawCalls: 42, triangles: 123456 }, onChange }}
+        onBack={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("fps")).toHaveTextContent("30");
+    expect(screen.getByText("42")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Low" }));
+    expect(onChange).toHaveBeenCalledWith("low");
+  });
+
   it("asks before resetting and only resets on confirmation", () => {
     const onReset = vi.fn();
     const onBack = vi.fn();

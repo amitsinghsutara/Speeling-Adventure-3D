@@ -42,6 +42,15 @@ only. See `docs/content.md` in the source project.
 - The data calls itself an unpiloted, research-informed draft assuming General
   American pronunciation.
 
+## Platform code ported (not content)
+
+- 2026-10-15: the Android container bridge (`src/platform/containerBridge.ts`)
+  and the update-check helpers (`src/offline/updates.ts`) were re-implemented
+  from the source project's `src/platform/containerBridge.ts`, `src/pwa/*`
+  and `docs/container.md` / `docs/operations.md`. The exit method names are
+  the source's unconfirmed candidates; `cachedStatus(true)` is the one call
+  the source documents as in use.
+
 ## Not documented in the source
 
 - Licence and origin of the word MP3s (voice/TTS provider) are not recorded in

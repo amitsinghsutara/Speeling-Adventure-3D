@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import type { QualityLevel } from "@/game/graphics/quality";
+import type { QualityPreference } from "@/game/graphics/qualityPreference";
 import { STATUS_TEXT, percent, type ProgressReport } from "@/learning/report";
+import type { OfflineStatus } from "@/offline/serviceWorkerClient";
+import type { ContainerReport } from "@/platform/containerBridge";
 
 export interface LevelStars {
   readonly level: number;
@@ -20,10 +24,29 @@ export interface GrownUpsFacts {
   readonly storedEvents: number;
 }
 
+export interface GraphicsSettings {
+  readonly preference: QualityPreference;
+  readonly effective: QualityLevel;
+  /** True when a ?quality= URL parameter is forcing the preset. */
+  readonly urlOverride: boolean;
+  readonly stats: { readonly averageFps: number; readonly drawCalls: number; readonly triangles: number };
+  readonly onChange: (value: QualityPreference) => void;
+}
+
+export interface UpdateSettings {
+  readonly buildId: string;
+  readonly offline: OfflineStatus;
+  readonly onCheck: () => void;
+  readonly onApply: () => void;
+}
+
 export interface GrownUpsScreenProps {
   report: ProgressReport;
   stars: readonly LevelStars[];
   facts: GrownUpsFacts;
+  graphics?: GraphicsSettings;
+  container?: ContainerReport;
+  updates?: UpdateSettings;
   onBack: () => void;
   onReset: () => void;
 }
@@ -34,7 +57,22 @@ export interface GrownUpsScreenProps {
  * press-and-hold. Nothing on this page is sent anywhere. Ported in spirit from
  * the source project; this build has no AI suggestions.
  */
-export function GrownUpsScreen({ report, stars, facts, onBack, onReset }: GrownUpsScreenProps) {
+const QUALITY_CHOICES: readonly { value: QualityPreference; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const CHECK_TEXT: Record<string, string> = {
+  "update-ready": "A new version is ready.",
+  "up-to-date": "You have the latest version.",
+  offline: "No connection right now; the game keeps working offline.",
+  error: "Could not check right now. Try again later.",
+  unsupported: "Updates are handled by your browser on this device.",
+};
+
+export function GrownUpsScreen({ report, stars, facts, graphics, container, updates, onBack, onReset }: GrownUpsScreenProps) {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const started = report.levels.filter((l) => l.status !== "not-started");
   const starsFor = (level: number) => stars.find((s) => s.level === level) ?? { level, earned: 0, max: 0 };
@@ -160,6 +198,100 @@ export function GrownUpsScreen({ report, stars, facts, onBack, onReset }: GrownU
             </div>
           </dl>
         </section>
+
+        {graphics ? (
+          <section className="grownups__card" aria-labelledby="graphics">
+            <h2 id="graphics">Graphics</h2>
+            <p className="grownups__muted">
+              Auto picks a preset for this device and steps down by itself if the game runs slowly.
+              {graphics.urlOverride ? " A test setting in the address bar is overriding this choice." : ""}
+            </p>
+            <div className="grownups__choices" role="group" aria-label="Graphics quality">
+              {QUALITY_CHOICES.map((choice) => (
+                <button
+                  key={choice.value}
+                  type="button"
+                  className={`button button--secondary ${graphics.preference === choice.value ? "button--selected" : ""}`}
+                  aria-pressed={graphics.preference === choice.value}
+                  onClick={() => graphics.onChange(choice.value)}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+            <dl className="grownups__facts">
+              <div>
+                <dt>Running now</dt>
+                <dd>{graphics.effective}</dd>
+              </div>
+              <div>
+                <dt>Frames per second</dt>
+                <dd data-testid="fps">{Math.round(graphics.stats.averageFps)}</dd>
+              </div>
+              <div>
+                <dt>Draw calls</dt>
+                <dd>{graphics.stats.drawCalls}</dd>
+              </div>
+              <div>
+                <dt>Triangles</dt>
+                <dd>{graphics.stats.triangles.toLocaleString()}</dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+
+        {updates ? (
+          <section className="grownups__card" aria-labelledby="version">
+            <h2 id="version">App version</h2>
+            <p className="grownups__muted">
+              Build {updates.buildId}
+              {updates.offline.version ? ` · offline copy ${updates.offline.version}` : ""}
+              {updates.offline.phase === "ready" ? " · ready to play offline" : ""}
+            </p>
+            <div className="challenge__actions" style={{ justifyContent: "flex-start" }}>
+              <button type="button" className="button button--secondary" onClick={updates.onCheck} disabled={updates.offline.checking}>
+                {updates.offline.checking ? "Checking…" : "Check for updates"}
+              </button>
+              {updates.offline.updateReady ? (
+                <button type="button" className="button" onClick={updates.onApply}>
+                  Update now
+                </button>
+              ) : null}
+            </div>
+            {updates.offline.lastCheck ? (
+              <p className="grownups__muted" role="status">
+                {CHECK_TEXT[updates.offline.lastCheck.result] ?? updates.offline.lastCheck.result}
+              </p>
+            ) : updates.offline.updateReady ? (
+              <p className="grownups__muted" role="status">A new version is ready.</p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {container ? (
+          <section className="grownups__card" aria-labelledby="container">
+            <h2 id="container">Container app</h2>
+            {container.bridges.length === 0 ? (
+              <p className="grownups__muted">
+                No container app found. In a normal browser this is expected, and there is no exit button.
+              </p>
+            ) : (
+              <>
+                {container.bridges.map((bridge) => (
+                  <p key={bridge.name} className="grownups__muted">
+                    <strong>window.{bridge.name}</strong>:{" "}
+                    {bridge.methods.length > 0 ? bridge.methods.join(", ") : "no methods listed"}
+                  </p>
+                ))}
+                <p className="grownups__muted">
+                  {container.exitMethod
+                    ? `Exit button: on (uses ${container.exitMethod}).`
+                    : "Exit button: off. None of these is a known exit method."}
+                </p>
+              </>
+            )}
+          </section>
+        ) : null}
 
         <section className="grownups__card" aria-labelledby="reset">
           <h2 id="reset">Start over</h2>

@@ -17,6 +17,11 @@ export interface HudProps {
   onOpenGrownUps?: () => void;
   /** Current scene name and puzzle progress, e.g. "Sunny Meadow · 2/5". */
   sceneLabel?: string | null;
+  /** Present only inside the Android container: shows the door button. */
+  onExit?: () => void;
+  /** A new version is waiting and nothing is open: show the banner. */
+  updateReady?: boolean;
+  onUpdateNow?: () => void;
 }
 
 const HINTS: Record<ControlMode, string> = {
@@ -34,6 +39,9 @@ export function Hud({
   offlinePhase = "disabled",
   onOpenGrownUps,
   sceneLabel = null,
+  onExit,
+  updateReady = false,
+  onUpdateNow,
 }: HudProps) {
   return (
     <div
@@ -43,7 +51,14 @@ export function Hud({
       data-offline={offlinePhase}
     >
       <div className="hud__top">
-        <div className="hud__badge">{sceneLabel ?? "Spelling Adventure 3D"}</div>
+        <div className="hud__top-left">
+          {onExit ? (
+            <button type="button" className="hud__exit" aria-label="Leave the game" onClick={onExit}>
+              🚪
+            </button>
+          ) : null}
+          <div className="hud__badge">{sceneLabel ?? "Spelling Adventure 3D"}</div>
+        </div>
         <div className="hud__top-right">
           {onOpenGrownUps ? (
             <HoldButton label="For grown-ups: press and hold to open" onComplete={onOpenGrownUps}>
@@ -61,6 +76,14 @@ export function Hud({
         </div>
       ) : null}
       <div className="hud__bottom">
+        {updateReady ? (
+          <div className="hud__update" role="status">
+            <span>A new version is ready!</span>
+            <button type="button" className="button hud__update-button" onClick={onUpdateNow}>
+              Update now
+            </button>
+          </div>
+        ) : null}
         {prompt ? (
           <div className="hud__prompt" role="status" aria-live="polite">
             {prompt}

@@ -6,7 +6,7 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 - [x] Confirm working directory is the new project, not an existing game.
 - [x] Check Node.js/npm and package manager versions.
 - [x] Check installed Spec Kit version and supported commands.
-- [ ] Resolve hosting target, baseline Android device/WebView, and asset approach. _(2026-10-14: both Node and static-export builds verified; device and host still undecided.)_
+- [ ] Resolve hosting target, baseline Android device/WebView, and asset approach. _(2026-10-15: static export deployed to Cloudflare Pages at https://spelling-adventure-3d.pages.dev/ via `npm run deploy:cloudflare`; device still undecided.)_
 - [x] Review open questions in `spec.md`.
 - [ ] Record architecture decisions before optional server features.
 
@@ -74,11 +74,11 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 ## Phase 8 — Performance and release
 - [ ] Define baseline Android device and WebView version.
 - [ ] Measure startup, frame time, draw calls, asset size and memory behavior.
-- [ ] Add low/medium/high quality settings.
-- [ ] Reduce expensive shadows/effects on low-end devices.
-- [ ] Test touch, pause/resume, orientation and storage recovery.
+- [x] Add low/medium/high quality settings. _(2026-10-15: Auto/Low/Medium/High on the grown-ups screen, persisted; Auto steps down by itself after sustained low frame rate)_
+- [x] Reduce expensive shadows/effects on low-end devices. _(2026-10-15: presets drop shadows, antialiasing, pixel ratio and instance counts; the safety net enforces it at runtime)_
+- [ ] Test touch, pause/resume, orientation and storage recovery. _(2026-10-15: render loop pauses while the tab is hidden; storage recovery tested in Phase 5; touch and orientation checked at phone viewports in desktop Chrome; real-device pass still pending.)_
 - [ ] Verify hosting and API configuration.
-- [ ] Document build, deployment, PWA installation and Android integration.
+- [x] Document build, deployment, PWA installation and Android integration. _(2026-10-15: README "Deploying" section; Android WebView notes pending the host decision)_
 
 ## Definition of done
 - [ ] Acceptance criteria in `spec.md` are met.
@@ -171,3 +171,21 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 - Sign markers show state (grey locked, yellow available, green sphere done); gates show closed/open. The HUD badge reads `<scene> · done/5`. Interacting with a closed gate explains how many signs remain; an open gate shows a notice with **Go through**, which cancels any quest, resets input, shows the loading screen and rebuilds the canvas for the new level. Returning players start in the furthest unlocked level.
 - Grass is drawn in 36 chunks (12 sectors × 3 rings) so the camera frustum culls what it cannot see; counts scaled for the larger area (low 7000, medium 16000, high 30000). High preset measured at ~30 fps on the Intel Iris Xe laptop.
 - Verified in Chrome: fresh level 1 with five signs and the far gate; seeded progress started the game in Autumn Woods with ten stars; the entry gate prompted, offered **Go back?**, and travelled to Sunny Meadow showing 5/5.
+
+### 2026-10-15 — Performance safety net (Phase 8, part 1)
+- `src/game/graphics/perfMonitor.ts`: pure rolling frame-time monitor (3 s window, 4 s warm-up, suggests a downgrade after 6 s under 24 fps, then a 20 s cooldown). A `PerfProbe` inside the canvas feeds it and keeps live stats (fps, draw calls, triangles) in a module store read by the grown-ups screen.
+- `src/game/graphics/qualityPreference.ts`: Auto or a fixed preset, stored in localStorage (a per-browser convenience, never progress); Auto remembers the lowest preset the safety net settled on. Priority: `?quality=` URL override → preference → heuristic capped by the auto floor. Downgrades never happen mid-puzzle and show a brief HUD note.
+- Quality and scene changes no longer rebuild the canvas: the renderer stays, the scene children and player rig re-render. Rebuilding a canvas inside one page left the old WebGL context's GPU state behind and dragged later frames down to ~1.5 fps (also the cause of the earlier 'worn tab' mystery). Forcing context loss on unmount is NOT a fix: React strict mode runs effects twice in development and the forced loss killed the live renderer.
+- The render loop pauses while the tab is hidden (`frameloop="never"`), so background tabs cost nothing.
+- Verified in Chrome (fresh tab): High 60 fps with 116 draw calls / 273k triangles at level 2; switching Low → Auto through the grown-ups screen kept the same canvas element and 60 fps; preference persisted and cleared.
+- Still needs a real Android device: measured startup, memory behaviour, touch feel, orientation, WebView audio and service-worker behaviour.
+
+### 2026-10-15 — Android container and app updates (ported from Speeling Game 3)
+- `src/platform/containerBridge.ts`: capability-detected bridge on `window.Android`. `notifyContainerCached()` calls `cachedStatus(true)` once the precache (now including all 200 word MP3s) succeeds; `detectExitBridge()` enables the HUD door button only when one of the UNCONFIRMED exit candidates (`closeApp`, `exitApp`, `close`, `finish`) is callable; `describeContainer()` lists bridge methods for the grown-ups "Container app" card so the real exit name can be read off a device.
+- Exit always confirms through the notice dialog ("Leave the forest?"; mid-puzzle copy says the puzzle will start again) with **Stay and play** first and focused; Escape stays.
+- `src/offline/updates.ts`: `checkRegistration()` (registration.update() + wait for install, up to 20 s) and `scheduleUpdateChecks()` (30 min timer, foreground, online; 60 s minimum gap). `serviceWorkerClient` became a small store (`createOfflineController`) exposing `checkForUpdates`/`applyUpdate` and watching `controllerchange`; the HUD shows "A new version is ready!" with **Update now** only while nothing is open; grown-ups get an "App version" card with **Check for updates**.
+- Tests: `tests/unit/container.test.ts` (bridge, precache extras, update checks, scheduler) and `tests/smoke/container.test.tsx` (door button hidden in browsers, confirm flow, grown-ups cards). Still needs a real host app to confirm the exit method and WebView behaviour.
+
+### 2026-10-15 — Cloudflare Pages deployment
+- Classic Pages project `spelling-adventure-3d` (created with `wrangler pages project create --force`, since Wrangler 4.151 otherwise delegates new projects to Workers). `scripts/deploy-cloudflare.mjs` builds the static export with a dated build id (`cf-YYYYMMDD-HHMM`) and runs `wrangler pages deploy out`. `public/_headers`: `sw.js` and the manifest `no-cache`, `/_next/static/*` immutable, audio and icons one week.
+- Verified live: service worker registered on the HTTPS origin, `sa3d-cf-20261015-1710` cache filled with the shell, build assets and all 200 recordings; headers confirmed with curl.

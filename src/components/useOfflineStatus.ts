@@ -1,43 +1,50 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { wordAudioUrl } from "@/game/audio/wordAudio";
+import { loadCurriculum } from "@/learning/loadCurriculum";
 import {
   INITIAL_OFFLINE_STATUS,
-  prepareOffline,
+  createOfflineController,
+  type OfflineController,
   type OfflineStatus,
 } from "@/offline/serviceWorkerClient";
 
+const inert: OfflineController = {
+  getSnapshot: () => INITIAL_OFFLINE_STATUS,
+  subscribe: () => () => {},
+  start: async () => INITIAL_OFFLINE_STATUS,
+  checkForUpdates: async () => "unsupported",
+  applyUpdate: () => {},
+  stop: () => {},
+};
+
+export interface OfflineBinding {
+  readonly status: OfflineStatus;
+  readonly controller: OfflineController;
+}
+
 /**
- * Starts offline preparation once the game is ready (so the resource list
- * is complete) and tracks online/offline transitions.
+ * Starts offline preparation once the game is ready (so the resource list is
+ * complete), precaching every word recording too, and keeps update checks
+ * running for the life of the page.
  */
-export function useOfflineStatus(enabled: boolean): OfflineStatus {
-  const [status, setStatus] = useState<OfflineStatus>(INITIAL_OFFLINE_STATUS);
-
-  useEffect(() => {
-    if (!enabled || typeof window === "undefined") return;
-    let cancelled = false;
-    void prepareOffline(window, {
+export function useOfflineStatus(enabled: boolean): OfflineBinding {
+  const controller = useMemo<OfflineController>(() => {
+    if (typeof window === "undefined") return inert;
+    return createOfflineController(window, {
       buildId: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
-      onChange: (next) => {
-        if (!cancelled) setStatus(next);
-      },
+      extraUrls: loadCurriculum().items.map((item) => wordAudioUrl(item.target)),
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
+  }, []);
+  const status = useSyncExternalStore(controller.subscribe, controller.getSnapshot, () => INITIAL_OFFLINE_STATUS);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sync = () => setStatus((s) => ({ ...s, online: window.navigator.onLine }));
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
-    return () => {
-      window.removeEventListener("online", sync);
-      window.removeEventListener("offline", sync);
-    };
-  }, []);
+    if (!enabled) return;
+    void controller.start();
+  }, [enabled, controller]);
 
-  return status;
+  useEffect(() => () => controller.stop(), [controller]);
+
+  return { status, controller };
 }

@@ -143,3 +143,73 @@ Press and hold **For grown-ups** in the top-right corner for about two
 seconds to open the progress screen: questions answered, level statuses,
 tricky spots, words to practise together, device facts, and a confirmed
 reset. Everything is computed on the device; nothing is sent anywhere.
+
+## Graphics and performance
+
+The game picks a preset from device hints (Low/Medium/High) and, in Auto
+mode, steps down by itself after a sustained low frame rate. Grown-ups can
+pin a preset on their screen, which also shows live frames per second, draw
+calls and triangles. `?quality=low|medium|high` overrides everything for
+device testing. The render loop pauses while the tab is hidden.
+
+## Deploying
+
+The app has no server-side features, so either shape works:
+
+- **Node host** (any platform that runs `next start`): `npm run build` then
+  `npm start`. Serves the app, the service worker and the audio from one
+  origin.
+- **Static host** (object storage, CDN, GitHub Pages style):
+  `NEXT_OUTPUT_EXPORT=1 npm run build` produces `out/`; upload that folder.
+  The service worker and manifest must be served from the site root over
+  HTTPS (or localhost) for offline play and installation to work.
+
+- **Cloudflare Pages** (current deployment): `npm run deploy:cloudflare`
+  builds the static export with a dated build id and uploads `out/` to the
+  `spelling-adventure-3d` Pages project (production branch `main`; pass
+  `-- --branch preview` for a preview URL). Needs a one-time
+  `npx wrangler login`. `public/_headers` keeps `sw.js` and the manifest
+  uncached so returning players pick up new builds, and marks hashed build
+  assets immutable. Live at https://spelling-adventure-3d.pages.dev/.
+
+Every build gets its own cache via `NEXT_PUBLIC_BUILD_ID` (set it in CI for
+reproducible ids). Returning players get the new version on their next
+launch; the old cache is removed once the new worker has installed.
+
+### Android host app (WebView)
+
+- Load the game over HTTPS or from a local HTTP server; `file://` has no
+  service worker, no IndexedDB in some versions, and blocks audio autoplay.
+- Enable JavaScript, DOM storage and media playback without a user gesture
+  for the word recordings.
+- Keep the WebView on an up-to-date Chromium (WebGL 2 and Service Workers).
+- Hardware acceleration must be on for the WebView; without it WebGL is
+  software-rendered and the game will fall back to the Low preset.
+- The baseline device and WebView version are still undecided; measure
+  there before claiming compatibility.
+
+The game talks to the host app only through capabilities it can detect on
+`window.Android` (never by user agent), so nothing changes in a browser:
+
+- **Cache complete**: once the service worker has stored the shell, the
+  build assets and all 200 word recordings, the page calls
+  `window.Android.cachedStatus(true)` (the one container method the earlier
+  games already rely on).
+- **Exit button**: a door button appears top-left only when the bridge has a
+  callable exit method. The candidate names (`closeApp`, `exitApp`,
+  `close`, `finish`) are UNCONFIRMED; replace the list in
+  `src/platform/containerBridge.ts` once the host's method is known. The
+  grown-ups screen's **Container app** card lists the bridge's methods so the
+  real name can be read off a device. Leaving always asks first
+  ("Leave the forest?"), with **Stay and play** as the focused first choice.
+
+### Updates
+
+The service worker normally looks for a new version only on page load, and a
+host app may stay open for days. The page therefore also checks on a 30-minute
+timer, when it returns to the foreground and when the device comes back online
+(never more than once a minute). When a newer build has installed, an
+"A new version is ready!" banner with **Update now** appears in the HUD, but
+only while no puzzle or dialog is open. Grown-ups can see the running build
+and **Check for updates** on their screen. Applying an update reloads the page;
+progress lives in IndexedDB and is unaffected.

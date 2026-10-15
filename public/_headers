@@ -1,0 +1,13 @@
+# Cloudflare Pages headers. The service worker must never be served stale,
+# or returning players would miss new builds; hashed build assets and the
+# word recordings can be cached for a long time.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+/audio/words/*
+  Cache-Control: public, max-age=604800
+/icons/*
+  Cache-Control: public, max-age=604800

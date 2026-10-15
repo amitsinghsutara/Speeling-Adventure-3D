@@ -1,15 +1,14 @@
 /**
  * Client side of the offline story (FR-09). Registers the service worker,
- * asks it to precache the assets this session actually loaded, and reports a
- * small readiness status. Pure helpers are exported for unit tests.
+ * asks it to precache the assets this session loaded plus every word
+ * recording, reports readiness (and tells the Android container), and keeps
+ * the app up to date with periodic checks. Pure helpers are exported for
+ * unit tests; the controller is a small external store for React.
  */
-export type OfflinePhase =
-  | "unsupported"
-  | "disabled"
-  | "registering"
-  | "caching"
-  | "ready"
-  | "failed";
+import { notifyContainerCached } from "@/platform/containerBridge";
+import { checkRegistration, scheduleUpdateChecks, type UpdateCheckResult } from "./updates";
+
+export type OfflinePhase = "unsupported" | "disabled" | "registering" | "caching" | "ready" | "failed";
 
 export interface OfflineStatus {
   readonly phase: OfflinePhase;
@@ -18,6 +17,10 @@ export interface OfflineStatus {
   readonly cached: number;
   readonly failed: readonly string[];
   readonly error: string | null;
+  /** A newer build has taken over the service worker; reload to use it. */
+  readonly updateReady: boolean;
+  readonly checking: boolean;
+  readonly lastCheck: { readonly at: number; readonly result: UpdateCheckResult } | null;
 }
 
 export const INITIAL_OFFLINE_STATUS: OfflineStatus = {
@@ -27,6 +30,9 @@ export const INITIAL_OFFLINE_STATUS: OfflineStatus = {
   cached: 0,
   failed: [],
   error: null,
+  updateReady: false,
+  checking: false,
+  lastCheck: null,
 };
 
 export interface RegistrationDecisionInput {
@@ -52,12 +58,14 @@ export function shouldRegisterServiceWorker(input: RegistrationDecisionInput): b
 export const SHELL_URLS: readonly string[] = ["/", "/manifest.webmanifest"];
 
 /**
- * Picks the same-origin build assets that this page loaded, so the precache
- * list reflects what the game really needs instead of a guessed manifest.
+ * Picks the same-origin build assets that this page loaded, plus any extra
+ * URLs the game needs offline (every word recording), so the precache list
+ * reflects what the game really needs instead of a guessed manifest.
  */
 export function selectPrecacheUrls(
   resources: ReadonlyArray<{ readonly name: string }>,
   origin: string,
+  extraUrls: readonly string[] = [],
 ): string[] {
   const urls = new Set<string>(SHELL_URLS);
   for (const entry of resources) {
@@ -73,6 +81,7 @@ export function selectPrecacheUrls(
       urls.add(url.pathname + url.search);
     }
   }
+  for (const extra of extraUrls) urls.add(extra);
   return Array.from(urls);
 }
 
@@ -99,11 +108,7 @@ interface PrecacheResult {
   readonly error?: string;
 }
 
-function postWithReply<T>(
-  worker: ServiceWorker,
-  message: unknown,
-  timeoutMs: number,
-): Promise<T> {
+function postWithReply<T>(worker: ServiceWorker, message: unknown, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const channel = new MessageChannel();
     const timer = setTimeout(() => reject(new Error("service worker did not reply")), timeoutMs);
@@ -125,63 +130,148 @@ async function waitForActiveWorker(
   throw new Error("service worker failed to activate");
 }
 
-export interface PrepareOfflineOptions {
+export interface OfflineController {
+  getSnapshot(): OfflineStatus;
+  subscribe(listener: () => void): () => void;
+  /** Registers, precaches and starts update checks. Safe to call once. */
+  start(): Promise<OfflineStatus>;
+  /** Asks the server for a new version now. */
+  checkForUpdates(): Promise<UpdateCheckResult>;
+  /** Loads the new version (reloads the page). Only call when it cannot interrupt play. */
+  applyUpdate(): void;
+  stop(): void;
+}
+
+export interface OfflineControllerOptions {
   readonly buildId: string;
-  readonly onChange: (status: OfflineStatus) => void;
+  /** Extra URLs to precache, e.g. every word recording. */
+  readonly extraUrls?: readonly string[];
   readonly timeoutMs?: number;
+  readonly now?: () => number;
+}
+
+export function createOfflineController(win: Window, options: OfflineControllerOptions): OfflineController {
+  const now = options.now ?? Date.now;
+  let status: OfflineStatus = { ...INITIAL_OFFLINE_STATUS, online: win.navigator.onLine };
+  const listeners = new Set<() => void>();
+  const update = (patch: Partial<OfflineStatus>) => {
+    status = { ...status, ...patch };
+    listeners.forEach((l) => l());
+    return status;
+  };
+  let registration: ServiceWorkerRegistration | null = null;
+  let stopChecks: (() => void) | null = null;
+  let running: Promise<UpdateCheckResult> | null = null;
+  let reloading = false;
+
+  const onOnline = () => update({ online: true });
+  const onOffline = () => update({ online: false });
+  win.addEventListener("online", onOnline);
+  win.addEventListener("offline", onOffline);
+
+  const checkForUpdates = async (): Promise<UpdateCheckResult> => {
+    if (!registration) {
+      update({ lastCheck: { at: now(), result: "unsupported" } });
+      return "unsupported";
+    }
+    if (running) return running;
+    update({ checking: true });
+    running = checkRegistration(registration, () => win.navigator.onLine !== false)
+      .catch((): UpdateCheckResult => "error")
+      .then((result) => {
+        update({
+          checking: false,
+          lastCheck: { at: now(), result },
+          ...(result === "update-ready" ? { updateReady: true } : {}),
+        });
+        running = null;
+        return result;
+      });
+    return running;
+  };
+
+  return {
+    getSnapshot: () => status,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+
+    async start() {
+      const decision = shouldRegisterServiceWorker({
+        hasServiceWorker: "serviceWorker" in win.navigator,
+        isSecureContext: win.isSecureContext,
+        nodeEnv: process.env.NODE_ENV,
+        search: win.location.search,
+      });
+      if (!("serviceWorker" in win.navigator)) return update({ phase: "unsupported" });
+      if (!decision) return update({ phase: "disabled" });
+
+      update({ phase: "registering" });
+      try {
+        const container = win.navigator.serviceWorker;
+        const hadController = !!container.controller;
+        // A newer worker taking over while this page runs old code means an update is ready.
+        container.addEventListener("controllerchange", () => {
+          if (reloading) {
+            win.location.reload();
+            return;
+          }
+          if (hadController) update({ updateReady: true });
+        });
+        registration = await container.register(`/sw.js?v=${encodeURIComponent(options.buildId)}`, {
+          scope: "/",
+          updateViaCache: "none",
+        });
+        const worker = await waitForActiveWorker(registration, container);
+        update({ phase: "caching" });
+        const resources = win.performance.getEntriesByType("resource");
+        const urls = selectPrecacheUrls(resources, win.location.origin, options.extraUrls ?? []);
+        const result = await postWithReply<PrecacheResult>(
+          worker,
+          { type: "precache", urls },
+          options.timeoutMs ?? 120_000,
+        );
+        const next = update({
+          phase: result.ok ? "ready" : "failed",
+          version: result.version,
+          cached: result.cached,
+          failed: result.failed,
+          error: result.error ?? (result.ok ? null : `${result.failed.length} asset(s) not cached`),
+        });
+        if (result.ok) notifyContainerCached(win);
+        stopChecks = scheduleUpdateChecks({ check: checkForUpdates, now, doc: win.document, win });
+        return next;
+      } catch (error) {
+        return update({ phase: "failed", error: error instanceof Error ? error.message : String(error) });
+      }
+    },
+
+    checkForUpdates,
+
+    applyUpdate() {
+      if (reloading) return;
+      reloading = true;
+      win.location.reload();
+    },
+
+    stop() {
+      stopChecks?.();
+      win.removeEventListener("online", onOnline);
+      win.removeEventListener("offline", onOffline);
+    },
+  };
 }
 
 /**
- * Full flow: register → wait for activation → precache this session's assets
- * → report. Never throws; failures end in the `failed` phase.
+ * Compatibility entry point used by tests and simple callers: runs the
+ * controller once and reports the final status through `onChange`.
  */
 export async function prepareOffline(
   win: Window,
-  options: PrepareOfflineOptions,
+  options: { readonly buildId: string; readonly onChange: (status: OfflineStatus) => void; readonly extraUrls?: readonly string[] },
 ): Promise<OfflineStatus> {
-  let status: OfflineStatus = { ...INITIAL_OFFLINE_STATUS, online: win.navigator.onLine };
-  const update = (patch: Partial<OfflineStatus>) => {
-    status = { ...status, ...patch };
-    options.onChange(status);
-    return status;
-  };
-
-  const decision = shouldRegisterServiceWorker({
-    hasServiceWorker: "serviceWorker" in win.navigator,
-    isSecureContext: win.isSecureContext,
-    nodeEnv: process.env.NODE_ENV,
-    search: win.location.search,
-  });
-  if (!("serviceWorker" in win.navigator)) return update({ phase: "unsupported" });
-  if (!decision) return update({ phase: "disabled" });
-
-  update({ phase: "registering" });
-  try {
-    const container = win.navigator.serviceWorker;
-    const registration = await container.register(`/sw.js?v=${encodeURIComponent(options.buildId)}`, {
-      scope: "/",
-      updateViaCache: "none",
-    });
-    const worker = await waitForActiveWorker(registration, container);
-    update({ phase: "caching" });
-    const resources = win.performance.getEntriesByType("resource");
-    const urls = selectPrecacheUrls(resources, win.location.origin);
-    const result = await postWithReply<PrecacheResult>(
-      worker,
-      { type: "precache", urls },
-      options.timeoutMs ?? 60_000,
-    );
-    return update({
-      phase: result.ok ? "ready" : "failed",
-      version: result.version,
-      cached: result.cached,
-      failed: result.failed,
-      error: result.error ?? (result.ok ? null : `${result.failed.length} asset(s) not cached`),
-    });
-  } catch (error) {
-    return update({
-      phase: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  const controller = createOfflineController(win, { buildId: options.buildId, extraUrls: options.extraUrls });
+  controller.subscribe(() => options.onChange(controller.getSnapshot()));
+  return controller.start();
 }
