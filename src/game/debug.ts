@@ -17,6 +17,8 @@ export interface DebugSnapshot {
   frames: number;
   /** Shared wind clock in seconds (0 and frozen under reduced motion). */
   windTime: number;
+  /** Live renderer and scene for in-browser profiling (dev only). */
+  three?: { gl: unknown; scene: unknown };
 }
 
 declare global {

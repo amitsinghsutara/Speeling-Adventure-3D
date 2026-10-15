@@ -126,6 +126,32 @@ describe("generateMeadowLayout", () => {
     }
   });
 
+  it("grows flowers in colour drifts with varied shapes, leans and tints", () => {
+    const layout = generateMeadowLayout(OPTIONS);
+    const kinds = new Set(layout.flowers.map((f) => f.kind));
+    expect(kinds).toEqual(new Set(["daisy", "bell"]));
+    for (const flower of layout.flowers) {
+      expect(Math.abs(flower.tilt)).toBeLessThanOrEqual(0.28);
+      expect(Math.abs(flower.tint)).toBeLessThanOrEqual(1);
+      expect(flower.scale).toBeGreaterThan(0.5);
+    }
+    // Clustered: a flower's nearest neighbour is usually close, and shares its colour more often than chance.
+    let sameColour = 0;
+    let near = 0;
+    for (const flower of layout.flowers) {
+      let best: { d: number; colorIndex: number } | null = null;
+      for (const other of layout.flowers) {
+        if (other === flower) continue;
+        const d = Math.hypot(other.position[0] - flower.position[0], other.position[2] - flower.position[2]);
+        if (!best || d < best.d) best = { d, colorIndex: other.colorIndex };
+      }
+      if (best && best.d < 2) near += 1;
+      if (best && best.colorIndex === flower.colorIndex) sameColour += 1;
+    }
+    expect(near / layout.flowers.length).toBeGreaterThan(0.7);
+    expect(sameColour / layout.flowers.length).toBeGreaterThan(0.5);
+  });
+
   it("starts Fern on the main path with the camera behind her", () => {
     const layout = generateMeadowLayout(OPTIONS);
     expect(distanceToPolylineXZ(layout.fernSpawn, layout.mainPath)).toBeLessThan(1);

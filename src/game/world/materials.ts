@@ -17,7 +17,9 @@ export interface SharedMaterials {
   readonly grass: THREE.MeshLambertMaterial;
   readonly rock: THREE.MeshLambertMaterial;
   readonly flower: THREE.MeshLambertMaterial;
+  readonly flowerCentre: THREE.MeshLambertMaterial;
   readonly stem: THREE.MeshLambertMaterial;
+  readonly leaf: THREE.MeshLambertMaterial;
   readonly cloud: THREE.MeshBasicMaterial;
   readonly signWood: THREE.MeshLambertMaterial;
   readonly signBoard: THREE.MeshLambertMaterial;
@@ -56,8 +58,11 @@ export function getSharedMaterials(): SharedMaterials {
     bush: new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }),
     grass: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
     rock: new THREE.MeshLambertMaterial({ color: "#9aa3ad", flatShading: true }),
+    // Petal geometry carries upward normals and both windings (see Flowers.tsx).
     flower: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
-    stem: new THREE.MeshLambertMaterial({ color: "#3f9c3a" }),
+    flowerCentre: new THREE.MeshLambertMaterial({ color: "#ffffff" }),
+    stem: new THREE.MeshLambertMaterial({ color: "#4a9c3c" }),
+    leaf: new THREE.MeshLambertMaterial({ color: "#58a845" }),
     cloud: new THREE.MeshBasicMaterial({ color: "#ffffff" }),
     signWood: new THREE.MeshLambertMaterial({ color: "#8a5a2b", flatShading: true }),
     signBoard: new THREE.MeshLambertMaterial({ color: "#c9893f", flatShading: true }),
@@ -70,7 +75,7 @@ export function getSharedMaterials(): SharedMaterials {
     foxDark: new THREE.MeshLambertMaterial({ color: "#3b2a24" }),
   };
   // Wind sway (vertex shader). Local-space ranges match each geometry:
-  // canopy sphere r=1, trunk cylinder h=1, blossom sphere r=0.15, stem h=0.32.
+  // canopy sphere r=1, trunk cylinder h=1.
   applyWind(cache.canopy, wind, { baseY: -1, spanY: 2, amplitude: 0.14 });
   applyWind(cache.trunk, wind, { baseY: -0.5, spanY: 1, amplitude: 0.03 });
   // Cone tier: unit cone, height 1 centred at 0.
@@ -78,7 +83,12 @@ export function getSharedMaterials(): SharedMaterials {
   applyWind(cache.bush, wind, { baseY: -0.6, spanY: 1.2, amplitude: 0.04 });
   // Grass tuft: cone of height 0.26 centred at 0; tips bend a lot.
   applyWind(cache.grass, wind, { baseY: -0.13, spanY: 0.26, amplitude: 0.09 });
-  applyWind(cache.flower, wind, { baseY: -0.15, spanY: 0.3, amplitude: 0.08 });
-  applyWind(cache.stem, wind, { baseY: -0.16, spanY: 0.32, amplitude: 0.08 });
+  // Blossoms sit at the top of their stem (local y >= 0): full sway. Stems
+  // (height 0.28 centred at 0) sway from nothing at the root to full at the top;
+  // leaves sit about a third of the way up.
+  applyWind(cache.flower, wind, { baseY: -0.3, spanY: 0.3, amplitude: 0.06 });
+  applyWind(cache.flowerCentre, wind, { baseY: -0.3, spanY: 0.3, amplitude: 0.06 });
+  applyWind(cache.stem, wind, { baseY: -0.14, spanY: 0.28, amplitude: 0.06 });
+  applyWind(cache.leaf, wind, { baseY: -0.3, spanY: 0.3, amplitude: 0.03 });
   return cache;
 }

@@ -778,3 +778,42 @@ summary:focus-visible {
   padding: 0.5rem 1rem;
   font-size: 1rem;
 }
+
+.overlay--rotate {
+  background: var(--sky, #7ec8f5);
+  color: var(--ink);
+  z-index: 20;
+}
+
+.rotate__phone {
+  width: 64px;
+  height: 108px;
+  border: 6px solid var(--ink);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+
+.rotate__arrow {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+@keyframes rotate-hint {
+  0%,
+  35% {
+    transform: rotate(0deg);
+  }
+  65%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate__phone {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}

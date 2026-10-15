@@ -203,6 +203,18 @@ The game talks to the host app only through capabilities it can detect on
   real name can be read off a device. Leaving always asks first
   ("Leave the forest?"), with **Stay and play** as the focused first choice.
 
+### Landscape only
+
+The meadow is built for landscape. On phones and tablets three layers keep
+it that way, each harmless where it does not apply: the container is asked
+through `window.Android.setContainerAppOrientation("landscape")` (the call
+the earlier games use), the web manifest requests landscape for installed
+copies, and the Screen Orientation API lock is attempted on start and again
+on the first touch (browsers only honour it in fullscreen or installed apps).
+If the device is still upright, a "Turn your tablet sideways" screen covers
+the game and input pauses until it is turned. Keyboard devices are never
+asked to turn. Code: `src/platform/orientation.ts`, `useLandscape`.
+
 ### Updates
 
 The service worker normally looks for a new version only on page load, and a

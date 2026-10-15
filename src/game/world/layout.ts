@@ -109,10 +109,19 @@ export interface RockPlacement {
   readonly rotationY: number;
 }
 
+export type FlowerKind = "daisy" | "bell";
+
 export interface FlowerPlacement {
   readonly position: Vec3;
   readonly colorIndex: number;
   readonly scale: number;
+  readonly kind: FlowerKind;
+  /** Heading of the stem's lean and the leaf, radians. */
+  readonly rotationY: number;
+  /** Lean of the stem, radians (small). */
+  readonly tilt: number;
+  /** -1..1 lightness/hue nudge so no two blossoms are exactly the same colour. */
+  readonly tint: number;
 }
 
 export interface CloudPlacement {
@@ -340,17 +349,62 @@ export function generateMeadowLayout(options: MeadowLayoutOptions): MeadowLayout
   }
 
   // ---- Flowers -----------------------------------------------------------
+  // Meadows bloom in drifts: a handful of patches, each dominated by one
+  // colour and one blossom shape (with the odd stray colour mixed in), plus a
+  // few loners scattered between them. Patch centres thin out towards the edge.
   const flowers: FlowerPlacement[] = [];
+  const pickColor = () => Math.floor(next() * palette.flower.length);
+  // Pale cups read as grey lumps from a distance, so pale colours are always daisies.
+  const isPale = (hex: string): boolean => {
+    const value = Number.parseInt(hex.replace("#", ""), 16);
+    if (Number.isNaN(value)) return false;
+    return (value >> 16) + ((value >> 8) & 0xff) + (value & 0xff) > 600;
+  };
+  const pickKind = (colorIndex: number): FlowerKind =>
+    !isPale(palette.flower[colorIndex] ?? "") && next() < 0.35 ? "bell" : "daisy";
+  const patchCount = Math.max(3, Math.round(options.flowerCount / 18));
+  // The first two drifts always bloom beside the start of the path, so every
+  // scene opens on flowers; the rest fall where they may.
+  const homePatches: Vec3[] = [
+    [fernSpawn[0] - 6, 0, fernSpawn[2] - 5],
+    [fernSpawn[0] + 7, 0, fernSpawn[2] - 2],
+  ];
+  const patches = Array.from({ length: patchCount }, (_, i) => ({
+    centre: homePatches[i] ?? randomPointInDisc(MEADOW_RADIUS - 9),
+    radius: randomBetween(next, 2.2, 5.5),
+    colorIndex: pickColor(),
+    secondColorIndex: pickColor(),
+    kind: "daisy" as FlowerKind,
+    size: randomBetween(next, 0.85, 1.15),
+  })).map((patch) => ({ ...patch, kind: pickKind(patch.colorIndex) }));
   const maxFlowerAttempts = options.flowerCount * 20;
   for (let attempt = 0; attempt < maxFlowerAttempts && flowers.length < options.flowerCount; attempt += 1) {
-    const position = randomPointInDisc(MEADOW_RADIUS - 6);
+    const loner = next() < 0.15;
+    const patch = patches[Math.floor(next() * patches.length)];
+    if (!patch) break;
+    let position: Vec3;
+    if (loner) {
+      position = randomPointInDisc(MEADOW_RADIUS - 6);
+    } else {
+      // Denser towards the middle of the patch, feathering out at the edge.
+      const r = patch.radius * Math.pow(next(), 0.65);
+      const a = randomBetween(next, 0, Math.PI * 2);
+      position = [patch.centre[0] + Math.cos(a) * r, 0, patch.centre[2] + Math.sin(a) * r];
+      if (Math.hypot(position[0], position[2]) > MEADOW_RADIUS - 6) continue;
+    }
     if (pathDistance(position) < PATH_WIDTH / 2 + 0.5) continue;
     if (distanceXZ(position, fernSpawn) < 1.5) continue;
     if (nearInteractable(position, 1)) continue;
+    const stray = next() < 0.2;
+    const colorIndex = loner ? pickColor() : stray ? patch.secondColorIndex : patch.colorIndex;
     flowers.push({
       position,
-      colorIndex: Math.floor(next() * palette.flower.length),
-      scale: randomBetween(next, 0.8, 1.3),
+      colorIndex,
+      kind: loner ? pickKind(colorIndex) : stray && isPale(palette.flower[colorIndex] ?? "") ? "daisy" : patch.kind,
+      scale: randomBetween(next, 0.6, 1.05) * (loner ? 1 : patch.size),
+      rotationY: randomBetween(next, 0, Math.PI * 2),
+      tilt: randomBetween(next, -0.28, 0.28),
+      tint: randomBetween(next, -1, 1),
     });
   }
 

@@ -59,7 +59,9 @@ import { Hud } from "./Hud";
 import { LoadingScreen } from "./LoadingScreen";
 import { NoticeDialog } from "./NoticeDialog";
 import { RenderErrorScreen } from "./RenderErrorScreen";
+import { RotateDeviceOverlay } from "./RotateDeviceOverlay";
 import { TouchControls } from "./TouchControls";
+import { useLandscape } from "./useLandscape";
 import { useOfflineStatus } from "./useOfflineStatus";
 import { useQuest } from "./useQuest";
 
@@ -179,6 +181,8 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
         : detectControlMode(readControlHints(window)),
     [],
   );
+  // Phones and tablets play sideways; upright ones are asked to turn.
+  const portrait = useLandscape(controlMode === "touch");
 
   // ---- Persistence -------------------------------------------------------
   const repository = useMemo(
@@ -246,7 +250,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     quest.state.phase === "active" ||
     quest.state.phase === "completed" ||
     quest.state.phase === "error";
-  const overlayOpen = dialogOpen || grownUpsOpen || notice !== null;
+  const overlayOpen = dialogOpen || grownUpsOpen || notice !== null || portrait;
 
   // Safety net: after sustained low frame rate, step the preset down once
   // (only in auto mode, never mid-puzzle) and remember the floor.
@@ -503,6 +507,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
               onClose={() => setNotice(null)}
             />
           ) : null}
+          {portrait ? <RotateDeviceOverlay /> : null}
           {grownUpsOpen && report ? (
             <GrownUpsScreen
               report={report}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { getDebugSnapshot } from "./debug";
 import { createPerfMonitor } from "./graphics/perfMonitor";
 import { getPerfStats } from "./graphics/perfStats";
 import {
@@ -213,6 +214,11 @@ function RendererWatchdog({ onError }: { onError: (error: unknown) => void }) {
 
 function PerfProbe({ onSuggestDowngrade }: { onSuggestDowngrade: (() => void) | undefined }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+  useEffect(() => {
+    const debug = getDebugSnapshot();
+    if (debug) debug.three = { gl, scene };
+  }, [gl, scene]);
   const monitor = useMemo(() => createPerfMonitor(), []);
   useFrame((_state, delta) => {
     const sample = monitor.sample(delta);

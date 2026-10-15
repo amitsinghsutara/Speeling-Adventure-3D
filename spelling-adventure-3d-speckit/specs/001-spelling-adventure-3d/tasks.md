@@ -189,3 +189,16 @@ Tasks are phased. Do not start all phases at once. Mark complete only after veri
 ### 2026-10-15 — Cloudflare Pages deployment
 - Classic Pages project `spelling-adventure-3d` (created with `wrangler pages project create --force`, since Wrangler 4.151 otherwise delegates new projects to Workers). `scripts/deploy-cloudflare.mjs` builds the static export with a dated build id (`cf-YYYYMMDD-HHMM`) and runs `wrangler pages deploy out`. `public/_headers`: `sw.js` and the manifest `no-cache`, `/_next/static/*` immutable, audio and icons one week.
 - Verified live: service worker registered on the HTTPS origin, `sa3d-cf-20261015-1710` cache filled with the shell, build assets and all 200 recordings; headers confirmed with curl.
+
+### 2026-10-15 — Natural flowers
+- `src/game/world/Flowers.tsx`: blossoms are now six low-poly petals with a yellow or dark heart (daisies) or a small open cup (bells) on thin, slightly leaning stems with one leaf each; five instanced draw calls. Petal geometry carries both windings and upward normals so every petal is lit like the ground and keeps its colour from any angle (a double-sided Lambert went grey on petals facing away from the sun, and a white emissive lift washed the colours out); per-blossom hue/lightness nudges stop any two looking identical.
+- `layout.ts`: flowers grow in drifts (about one patch per 16 flowers, radius 1.8–4.5 m, denser in the middle) that share a colour and shape, with 20 % stray second colours and 15 % loners; pale colours are always daisies because pale cups read as grey lumps. Two drifts always sit beside the start of the path. Counts raised to 300 / 600 / 1000 (low / medium / high) for a more colourful meadow; drifts of about 18 flowers, radius 2.2–5.5 m.
+- Stems shortened (0.28 m × 0.6–1.05 scale) so blossoms sit just above the grass; wind ranges retuned to match. Bells are five steep petals (a plain cone read as a grey lump).
+- Verified in a fresh Chrome tab at High with 1000 flowers and shadows: 60 fps steady over 35 s (114 draw calls, 333k triangles). Earlier 1 fps readings in this session were a browser/GPU-process state, not the flowers: hiding every flower mesh in the slow tab changed nothing, and a fresh tab ran at 60 fps.
+- `window.__spellingAdventureDebug.three` (dev only) now exposes the renderer and scene for in-browser profiling.
+
+### 2026-10-15 — Landscape on mobile
+- `src/platform/orientation.ts`: `requestContainerOrientation("landscape")` calls `window.Android.setContainerAppOrientation` (confirmed in use by the earlier games), `lockScreenOrientation` tries the Screen Orientation API, `isPortrait`/`watchOrientation` follow the `(orientation: portrait)` media query. Manifest orientation is now `landscape`.
+- `useLandscape(enabled)` (touch mode only) enforces on mount and again on the first pointer gesture, and reports portrait; GameShell shows `RotateDeviceOverlay` ("Turn your tablet sideways") and suspends input while upright. Keyboard devices are never asked.
+- Tests: `tests/unit/orientation.test.ts`, `tests/smoke/rotate-device.test.tsx` (overlay appears/disappears as the device turns, container asked on start, keyboard untouched). Visual check in Chrome via injected markup since the desktop window could not be made portrait; real-device behaviour still to confirm.
+
