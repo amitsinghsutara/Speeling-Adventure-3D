@@ -250,6 +250,11 @@ export function createOfflineController(win: Window, options: OfflineControllerO
         // so one URL serves every build and update checks see each deploy.
         registration = await container.register("/sw.js", { scope: "/", updateViaCache: "none" });
         const worker = await waitForActiveWorker(registration);
+        // A newer worker may have taken over before this listener existed
+        // (browsers check for updates on navigation, and offline preparation
+        // only starts once the scene is ready). Compare builds directly.
+        const active = await postWithReply<{ version?: string }>(worker, { type: "get-version" }, 3000).catch(() => null);
+        if (hadController && active?.version && active.version !== options.buildId) update({ updateReady: true });
         update({ phase: "caching" });
         const resources = win.performance.getEntriesByType("resource");
         const urls = selectPrecacheUrls(resources, win.location.origin, options.extraUrls ?? []);

@@ -1,23 +1,39 @@
 /**
- * The game is designed for landscape. Three layers try to keep phones and
+ * The game is designed for landscape. Several layers try to keep phones and
  * tablets sideways, each harmless where it does not apply:
  *
  * 1. The Android container, when present, is asked to fix its orientation
  *    through `window.Android.setContainerAppOrientation("landscape")`, the
- *    call the earlier Spelling Adventure games use.
+ *    call the earlier Spelling Adventure games use. The root layout also
+ *    makes this call inline at page start, before React loads.
  * 2. The web manifest asks for landscape when the app is installed.
- * 3. The Screen Orientation API lock is attempted (browsers only honour it in
- *    fullscreen or installed apps, so failures are expected and ignored).
+ * 3. The Screen Orientation API lock. Mobile browsers only grant it to a
+ *    fullscreen (or installed) page and only after a user gesture, so the
+ *    "turn your device" screen offers a tap that goes fullscreen and locks.
  *
- * When none of that works and a touch device is still upright, the shell
- * shows a "turn your device" screen instead (see `isPortrait`).
+ * Every attempt is recorded in an `OrientationReport` for the grown-ups
+ * screen, so what a particular device did can be read off it.
  */
 export type ContainerOrientation = "landscape" | "portrait";
 
-interface OrientationWindow {
+interface OrientationScreen {
+  orientation?: { lock?: (orientation: string) => Promise<void>; type?: string };
+}
+
+interface OrientationDocument {
+  fullscreenElement?: Element | null;
+  documentElement?: { requestFullscreen?: (options?: { navigationUI?: string }) => Promise<void> };
+}
+
+export interface OrientationWindow {
   Android?: Record<string, unknown>;
-  screen?: { orientation?: { lock?: (orientation: string) => Promise<void>; type?: string } };
-  matchMedia?: (query: string) => { matches: boolean; addEventListener?: (type: "change", fn: () => void) => void; removeEventListener?: (type: "change", fn: () => void) => void };
+  screen?: OrientationScreen;
+  document?: OrientationDocument;
+  matchMedia?: (query: string) => {
+    matches: boolean;
+    addEventListener?: (type: "change", fn: () => void) => void;
+    removeEventListener?: (type: "change", fn: () => void) => void;
+  };
   innerWidth?: number;
   innerHeight?: number;
 }
@@ -25,45 +41,85 @@ interface OrientationWindow {
 const currentWindow = (): OrientationWindow | undefined =>
   typeof window === "undefined" ? undefined : (window as unknown as OrientationWindow);
 
-/** Asks the native container to fix its orientation. Returns true if the container heard. */
+export type AttemptResult =
+  | { readonly outcome: "ok" }
+  | { readonly outcome: "unavailable" }
+  | { readonly outcome: "refused"; readonly reason: string };
+
+export interface OrientationReport {
+  /** Did the native container expose and accept setContainerAppOrientation? */
+  readonly container: AttemptResult;
+  readonly fullscreen: AttemptResult;
+  readonly lock: AttemptResult;
+  /** What triggered this attempt. */
+  readonly trigger: "start" | "gesture" | "tap";
+  readonly at: number;
+}
+
+const errorReason = (error: unknown): string =>
+  error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+
+/** Asks the native container to fix its orientation. */
 export function requestContainerOrientation(
   orientation: ContainerOrientation,
   win: OrientationWindow | undefined = currentWindow(),
-): boolean {
+): AttemptResult {
   const bridge = win?.Android;
   const method = bridge?.["setContainerAppOrientation"];
-  if (typeof method !== "function") return false;
+  if (typeof method !== "function") return { outcome: "unavailable" };
   try {
     (method as (value: string) => void).call(bridge, orientation);
-    return true;
-  } catch {
-    return false;
+    return { outcome: "ok" };
+  } catch (error) {
+    return { outcome: "refused", reason: errorReason(error) };
   }
 }
 
-/** Tries the Screen Orientation API lock; resolves true only if the browser accepted. */
+/** Puts the page in fullscreen (needs a user gesture in every browser). */
+export async function requestFullscreen(win: OrientationWindow | undefined = currentWindow()): Promise<AttemptResult> {
+  const doc = win?.document;
+  if (doc?.fullscreenElement) return { outcome: "ok" };
+  const request = doc?.documentElement?.requestFullscreen;
+  if (typeof request !== "function") return { outcome: "unavailable" };
+  try {
+    await request.call(doc?.documentElement, { navigationUI: "hide" });
+    return { outcome: "ok" };
+  } catch (error) {
+    return { outcome: "refused", reason: errorReason(error) };
+  }
+}
+
+/** Tries the Screen Orientation API lock. */
 export async function lockScreenOrientation(
   orientation: "landscape" | "portrait",
   win: OrientationWindow | undefined = currentWindow(),
-): Promise<boolean> {
+): Promise<AttemptResult> {
   const lock = win?.screen?.orientation?.lock;
-  if (typeof lock !== "function") return false;
+  if (typeof lock !== "function") return { outcome: "unavailable" };
   try {
     await lock.call(win?.screen?.orientation, orientation);
-    return true;
-  } catch {
-    return false;
+    return { outcome: "ok" };
+  } catch (error) {
+    return { outcome: "refused", reason: errorReason(error) };
   }
 }
 
-/** Container first, then the browser lock. Safe to call more than once. */
-export async function enforceLandscape(win: OrientationWindow | undefined = currentWindow()): Promise<{
-  container: boolean;
-  locked: boolean;
-}> {
+export interface EnforceOptions {
+  /** Go fullscreen first (only possible inside a user gesture). */
+  readonly fullscreen?: boolean;
+  readonly trigger?: OrientationReport["trigger"];
+  readonly now?: () => number;
+}
+
+/** Container first, then (optionally) fullscreen, then the browser lock. Safe to call repeatedly. */
+export async function enforceLandscape(
+  win: OrientationWindow | undefined = currentWindow(),
+  options: EnforceOptions = {},
+): Promise<OrientationReport> {
   const container = requestContainerOrientation("landscape", win);
-  const locked = await lockScreenOrientation("landscape", win);
-  return { container, locked };
+  const fullscreen: AttemptResult = options.fullscreen ? await requestFullscreen(win) : { outcome: "unavailable" };
+  const lock = await lockScreenOrientation("landscape", win);
+  return { container, fullscreen, lock, trigger: options.trigger ?? "start", at: (options.now ?? Date.now)() };
 }
 
 /** True when the viewport is taller than it is wide. */
@@ -79,4 +135,16 @@ export function watchOrientation(onChange: () => void, win: OrientationWindow | 
   const query = win.matchMedia("(orientation: portrait)");
   query.addEventListener?.("change", onChange);
   return () => query.removeEventListener?.("change", onChange);
+}
+
+/** One line per attempt, for the grown-ups screen. */
+export function describeAttempt(result: AttemptResult): string {
+  switch (result.outcome) {
+    case "ok":
+      return "yes";
+    case "unavailable":
+      return "not available here";
+    case "refused":
+      return `refused (${result.reason})`;
+  }
 }

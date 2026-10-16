@@ -213,8 +213,13 @@ the earlier games use), the web manifest requests landscape for installed
 copies, and the Screen Orientation API lock is attempted on start and again
 on the first touch (browsers only honour it in fullscreen or installed apps).
 If the device is still upright, a "Turn your tablet sideways" screen covers
-the game and input pauses until it is turned. Keyboard devices are never
-asked to turn. Code: `src/platform/orientation.ts`, `useLandscape`.
+the game and input pauses until it is turned. Its **Turn it for me** button
+goes fullscreen and locks landscape, which is the only way mobile browsers
+(Chrome on Android included) allow a page to rotate itself; the container
+call is also made inline in the document head before React loads. The
+grown-ups screen’s Container app card reports what each attempt achieved on
+the device in hand. Keyboard devices are never asked to turn. Code:
+`src/platform/orientation.ts`, `useLandscape`, `src/app/layout.tsx`.
 
 ### Updates
 

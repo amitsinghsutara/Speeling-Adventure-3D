@@ -6,6 +6,7 @@ import type { QualityPreference } from "@/game/graphics/qualityPreference";
 import { STATUS_TEXT, percent, type ProgressReport } from "@/learning/report";
 import type { OfflineStatus } from "@/offline/serviceWorkerClient";
 import type { ContainerReport } from "@/platform/containerBridge";
+import { describeAttempt, type OrientationReport } from "@/platform/orientation";
 
 export interface LevelStars {
   readonly level: number;
@@ -46,6 +47,8 @@ export interface GrownUpsScreenProps {
   facts: GrownUpsFacts;
   graphics?: GraphicsSettings;
   container?: ContainerReport;
+  /** What the last landscape attempt achieved (touch devices). */
+  orientation?: OrientationReport | null;
   updates?: UpdateSettings;
   onBack: () => void;
   onReset: () => void;
@@ -72,7 +75,7 @@ const CHECK_TEXT: Record<string, string> = {
   unsupported: "Updates are handled by your browser on this device.",
 };
 
-export function GrownUpsScreen({ report, stars, facts, graphics, container, updates, onBack, onReset }: GrownUpsScreenProps) {
+export function GrownUpsScreen({ report, stars, facts, graphics, container, orientation, updates, onBack, onReset }: GrownUpsScreenProps) {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const started = report.levels.filter((l) => l.status !== "not-started");
   const starsFor = (level: number) => stars.find((s) => s.level === level) ?? { level, earned: 0, max: 0 };
@@ -289,6 +292,14 @@ export function GrownUpsScreen({ report, stars, facts, graphics, container, upda
                     : "Exit button: off. None of these is a known exit method."}
                 </p>
               </>
+            )}
+            {orientation ? (
+              <p className="grownups__muted" data-testid="orientation-report">
+                Landscape ({orientation.trigger}): container asked — {describeAttempt(orientation.container)}; fullscreen —{" "}
+                {describeAttempt(orientation.fullscreen)}; browser lock — {describeAttempt(orientation.lock)}.
+              </p>
+            ) : (
+              <p className="grownups__muted">Landscape: not requested on this device (keyboard controls).</p>
             )}
           </section>
         ) : null}

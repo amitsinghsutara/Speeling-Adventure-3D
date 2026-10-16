@@ -19,9 +19,20 @@ export const viewport: Viewport = {
   themeColor: "#7ec8f5",
 };
 
+/**
+ * Runs before React: inside the Android container, fix the orientation at the
+ * first possible moment (the same call the earlier games make). Harmless in a
+ * browser, where window.Android does not exist.
+ */
+const EARLY_ORIENTATION_SCRIPT =
+  'try{var a=window.Android;if(a&&typeof a.setContainerAppOrientation==="function"){a.setContainerAppOrientation("landscape")}}catch(e){}';
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: EARLY_ORIENTATION_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

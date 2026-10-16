@@ -182,7 +182,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
     [],
   );
   // Phones and tablets play sideways; upright ones are asked to turn.
-  const portrait = useLandscape(controlMode === "touch");
+  const { portrait, report: orientationReport, requestLandscape } = useLandscape(controlMode === "touch");
 
   // ---- Persistence -------------------------------------------------------
   const repository = useMemo(
@@ -507,7 +507,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
               onClose={() => setNotice(null)}
             />
           ) : null}
-          {portrait ? <RotateDeviceOverlay /> : null}
+          {portrait ? <RotateDeviceOverlay onRequestLandscape={requestLandscape} /> : null}
           {grownUpsOpen && report ? (
             <GrownUpsScreen
               report={report}
@@ -522,6 +522,7 @@ export function GameShell({ repository: repositoryProp }: GameShellProps = {}) {
                 storedEvents: learning.getEvents().length,
               }}
               container={container}
+              orientation={orientationReport}
               updates={{
                 buildId: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
                 offline,

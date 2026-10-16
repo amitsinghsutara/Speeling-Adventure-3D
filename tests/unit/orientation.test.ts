@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  describeAttempt,
   enforceLandscape,
   isPortrait,
   lockScreenOrientation,
   requestContainerOrientation,
+  requestFullscreen,
   watchOrientation,
 } from "@/platform/orientation";
 
@@ -14,14 +16,14 @@ describe("requestContainerOrientation", () => {
       expect(this).toBe(android);
     });
     android["setContainerAppOrientation"] = setContainerAppOrientation;
-    expect(requestContainerOrientation("landscape", { Android: android })).toBe(true);
+    expect(requestContainerOrientation("landscape", { Android: android })).toEqual({ outcome: "ok" });
     expect(setContainerAppOrientation).toHaveBeenCalledWith("landscape");
   });
 
-  it("does nothing in a browser or when the container has no such method, and never throws", () => {
-    expect(requestContainerOrientation("landscape", {})).toBe(false);
-    expect(requestContainerOrientation("landscape", undefined)).toBe(false);
-    expect(requestContainerOrientation("landscape", { Android: { cachedStatus: () => {} } })).toBe(false);
+  it("reports when there is no container method, and a container that throws", () => {
+    expect(requestContainerOrientation("landscape", {})).toEqual({ outcome: "unavailable" });
+    expect(requestContainerOrientation("landscape", undefined)).toEqual({ outcome: "unavailable" });
+    expect(requestContainerOrientation("landscape", { Android: { cachedStatus: () => {} } })).toEqual({ outcome: "unavailable" });
     expect(
       requestContainerOrientation("landscape", {
         Android: {
@@ -30,26 +32,63 @@ describe("requestContainerOrientation", () => {
           },
         },
       }),
-    ).toBe(false);
+    ).toEqual({ outcome: "refused", reason: "Error: refused" });
   });
 });
 
-describe("lockScreenOrientation / enforceLandscape", () => {
-  it("reports a browser lock that succeeds, and one that is refused", async () => {
+describe("fullscreen and lock", () => {
+  it("reports a browser lock that succeeds, one that is refused, and one that is missing", async () => {
     const lock = vi.fn<(o: string) => Promise<void>>(async () => {});
-    expect(await lockScreenOrientation("landscape", { screen: { orientation: { lock } } })).toBe(true);
+    expect(await lockScreenOrientation("landscape", { screen: { orientation: { lock } } })).toEqual({ outcome: "ok" });
     expect(lock).toHaveBeenCalledWith("landscape");
-    const refused = vi.fn<(o: string) => Promise<void>>(() => Promise.reject(new Error("not fullscreen")));
-    expect(await lockScreenOrientation("landscape", { screen: { orientation: { lock: refused } } })).toBe(false);
-    expect(await lockScreenOrientation("landscape", {})).toBe(false);
+    const err = new Error("not fullscreen");
+    err.name = "NotAllowedError";
+    const refused = vi.fn<(o: string) => Promise<void>>(() => Promise.reject(err));
+    expect(await lockScreenOrientation("landscape", { screen: { orientation: { lock: refused } } })).toEqual({
+      outcome: "refused",
+      reason: "NotAllowedError: not fullscreen",
+    });
+    expect(await lockScreenOrientation("landscape", {})).toEqual({ outcome: "unavailable" });
   });
 
-  it("tries the container and the browser lock together", async () => {
+  it("requests fullscreen on the document element, and skips it when already fullscreen", async () => {
+    const request = vi.fn<() => Promise<void>>(async () => {});
+    const doc = { fullscreenElement: null, documentElement: { requestFullscreen: request } };
+    expect(await requestFullscreen({ document: doc })).toEqual({ outcome: "ok" });
+    expect(request).toHaveBeenCalledWith({ navigationUI: "hide" });
+    expect(await requestFullscreen({ document: { fullscreenElement: {} as Element, documentElement: { requestFullscreen: request } } })).toEqual({ outcome: "ok" });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(await requestFullscreen({ document: {} })).toEqual({ outcome: "unavailable" });
+  });
+
+  it("enforceLandscape tries the container, then fullscreen only when asked, then the lock", async () => {
     const setContainerAppOrientation = vi.fn<(value: string) => void>();
+    const request = vi.fn<() => Promise<void>>(async () => {});
     const lock = vi.fn<(o: string) => Promise<void>>(() => Promise.reject(new Error("no")));
-    const result = await enforceLandscape({ Android: { setContainerAppOrientation }, screen: { orientation: { lock } } });
-    expect(result).toEqual({ container: true, locked: false });
-    expect(setContainerAppOrientation).toHaveBeenCalledWith("landscape");
+    const win = {
+      Android: { setContainerAppOrientation },
+      screen: { orientation: { lock } },
+      document: { fullscreenElement: null, documentElement: { requestFullscreen: request } },
+    };
+    const start = await enforceLandscape(win, { now: () => 5 });
+    expect(start).toEqual({
+      container: { outcome: "ok" },
+      fullscreen: { outcome: "unavailable" },
+      lock: { outcome: "refused", reason: "Error: no" },
+      trigger: "start",
+      at: 5,
+    });
+    expect(request).not.toHaveBeenCalled();
+    const tap = await enforceLandscape(win, { fullscreen: true, trigger: "tap", now: () => 6 });
+    expect(tap.fullscreen).toEqual({ outcome: "ok" });
+    expect(tap.trigger).toBe("tap");
+    expect(setContainerAppOrientation).toHaveBeenCalledTimes(2);
+  });
+
+  it("describes attempts in plain words", () => {
+    expect(describeAttempt({ outcome: "ok" })).toBe("yes");
+    expect(describeAttempt({ outcome: "unavailable" })).toBe("not available here");
+    expect(describeAttempt({ outcome: "refused", reason: "x" })).toBe("refused (x)");
   });
 });
 

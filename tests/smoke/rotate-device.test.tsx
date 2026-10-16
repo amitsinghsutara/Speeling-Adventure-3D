@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameShell } from "@/components/GameShell";
 import { createMemoryRepository } from "@/persistence/memoryRepository";
@@ -61,6 +61,18 @@ describe("landscape on touch devices", () => {
 
     act(() => media.turn(true));
     expect(screen.getByTestId("rotate-device")).toBeInTheDocument();
+  });
+
+  it("goes fullscreen and locks landscape when the child taps the button", async () => {
+    const requestFullscreen = vi.fn<() => Promise<void>>(async () => {});
+    const lock = vi.fn<(o: string) => Promise<void>>(async () => {});
+    Object.defineProperty(document.documentElement, "requestFullscreen", { value: requestFullscreen, configurable: true });
+    Object.defineProperty(window.screen, "orientation", { value: { lock, type: "portrait-primary" }, configurable: true });
+    render(<GameShell repository={createMemoryRepository()} />);
+    await screen.findByTestId("hud");
+    fireEvent.click(screen.getByRole("button", { name: /turn it for me/i }));
+    await vi.waitFor(() => expect(lock).toHaveBeenCalledWith("landscape"));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
   });
 
   it("asks the container app for landscape on start", async () => {
