@@ -63,9 +63,9 @@ describe("offlineLabel", () => {
   });
 });
 
-describe("public/sw.js", () => {
+describe("src/sw/worker.js", () => {
   function loadWorker(version: string | null) {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "public/sw.js"), "utf8");
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/sw/worker.js"), "utf8");
     const listeners = new Map<string, (event: unknown) => void>();
     const self = {
       location: { href: `https://app.test/sw.js${version ? `?v=${version}` : ""}`, origin: "https://app.test" },

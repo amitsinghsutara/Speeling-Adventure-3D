@@ -48,7 +48,8 @@ src/game/           Client-only 3D world
 src/learning/       Framework-free learning layer: imported curriculum (content/), puzzles, questions, service, events
 src/persistence/    Versioned progress schema, repository interface, IndexedDB + memory implementations
 src/offline/        Service worker registration, precache list, offline status
-public/sw.js        Hand-written service worker (versioned cache per build)
+src/sw/worker.js    Hand-written service worker, served at /sw.js with the build id stamped in
+src/app/sw.js/      Route that stamps the build id into the worker (static in exports)
 public/manifest.webmanifest, public/icons/   PWA manifest and placeholder icons
 tests/unit/         Pure-logic tests (layout rules, path geometry, quality, WebGL probe)
 tests/smoke/        Server-render smoke test and shell state-machine test

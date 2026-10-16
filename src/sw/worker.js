@@ -8,11 +8,13 @@
  * - Other same-origin GETs (manifest, icons) are stale-while-revalidate.
  * - Everything else (non-GET, cross-origin, dev/HMR endpoints) passes through.
  *
- * The cache name includes the build id passed as ?v=<id> on the registration
- * URL, so a new build gets a fresh cache; old caches are removed only after
- * the new worker has installed its shell and activated.
+ * The cache name includes the build id. The /sw.js route (src/app/sw.js)
+ * stamps it into the script as self.__SA3D_BUILD__ so every build is a
+ * byte-different worker and browsers notice the update; a ?v= query on the
+ * script URL is accepted as a fallback. Old caches are removed only after the
+ * new worker has installed its shell and activated.
  */
-const VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
+const VERSION = self.__SA3D_BUILD__ || new URL(self.location.href).searchParams.get("v") || "dev";
 const CACHE_PREFIX = "sa3d-";
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SHELL_URL = "/";

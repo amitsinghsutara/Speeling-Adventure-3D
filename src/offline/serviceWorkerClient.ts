@@ -120,14 +120,31 @@ function postWithReply<T>(worker: ServiceWorker, message: unknown, timeoutMs: nu
   });
 }
 
-async function waitForActiveWorker(
-  registration: ServiceWorkerRegistration,
-  container: ServiceWorkerContainer,
-): Promise<ServiceWorker> {
-  if (registration.active) return registration.active;
-  await container.ready;
-  if (registration.active) return registration.active;
-  throw new Error("service worker failed to activate");
+/**
+ * Resolves with the worker from THIS build. If a newer script is installing
+ * (returning player after a deploy), wait for it rather than talking to the
+ * old worker, which would precache into the old cache.
+ */
+function waitForActiveWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker> {
+  const pending = registration.installing ?? registration.waiting;
+  if (!pending) {
+    if (registration.active) return Promise.resolve(registration.active);
+    return Promise.reject(new Error("service worker failed to install"));
+  }
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (pending.state === "activated") {
+        pending.removeEventListener("statechange", check);
+        resolve(pending);
+      } else if (pending.state === "redundant") {
+        pending.removeEventListener("statechange", check);
+        if (registration.active) resolve(registration.active);
+        else reject(new Error("service worker failed to activate"));
+      }
+    };
+    pending.addEventListener("statechange", check);
+    check();
+  });
 }
 
 export interface OfflineController {
@@ -211,19 +228,28 @@ export function createOfflineController(win: Window, options: OfflineControllerO
       try {
         const container = win.navigator.serviceWorker;
         const hadController = !!container.controller;
-        // A newer worker taking over while this page runs old code means an update is ready.
+        // A newer worker taking over while this page runs old code means an
+        // update is ready. Ask the new worker which build it is first: a worker
+        // of this page's own build (e.g. after a registration URL change)
+        // is not an update.
         container.addEventListener("controllerchange", () => {
           if (reloading) {
             win.location.reload();
             return;
           }
-          if (hadController) update({ updateReady: true });
+          if (!hadController) return;
+          const controller = container.controller;
+          if (!controller) return;
+          postWithReply<{ version?: string }>(controller, { type: "get-version" }, 3000)
+            .then((reply) => {
+              if (reply.version !== options.buildId) update({ updateReady: true });
+            })
+            .catch(() => update({ updateReady: true }));
         });
-        registration = await container.register(`/sw.js?v=${encodeURIComponent(options.buildId)}`, {
-          scope: "/",
-          updateViaCache: "none",
-        });
-        const worker = await waitForActiveWorker(registration, container);
+        // The script itself carries the build id (see src/app/sw.js/route.ts),
+        // so one URL serves every build and update checks see each deploy.
+        registration = await container.register("/sw.js", { scope: "/", updateViaCache: "none" });
+        const worker = await waitForActiveWorker(registration);
         update({ phase: "caching" });
         const resources = win.performance.getEntriesByType("resource");
         const urls = selectPrecacheUrls(resources, win.location.origin, options.extraUrls ?? []);
@@ -241,6 +267,8 @@ export function createOfflineController(win: Window, options: OfflineControllerO
         });
         if (result.ok) notifyContainerCached(win);
         stopChecks = scheduleUpdateChecks({ check: checkForUpdates, now, doc: win.document, win });
+        // A stale shell may have been served from cache: look for a newer build now.
+        void checkForUpdates();
         return next;
       } catch (error) {
         return update({ phase: "failed", error: error instanceof Error ? error.message : String(error) });
